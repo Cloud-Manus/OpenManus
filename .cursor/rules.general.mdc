@@ -1,0 +1,21 @@
+---
+description: Project General Specifications
+globs: 
+alwaysApply: true
+---
+## Project Overview
+This is an open-source AI Agent project called OpenManus. It leverages LLM capabilities to complete complex task planning and execution. The project is written in Python and runs on Python 3.12 version.
+
+## Background Information
+I want to run this project in the cloud and add a web interface, packaging it as a product that anyone can use directly in a browser. I hope to run the code it produces in an isolated environment and deploy the completed code directly to the cloud, where users can access it directly.
+
+## General Development Principles
+- DRY（Don't Repeat Yourself）
+- SOLID
+- KISS (Keep It Simple, Stupid)
+- YAGNI (You Ain't Gonna Need It)
+- POLA (Principle of Least Astonishment)
+- LoD (Law of Demeter)
+- SoC (Separation of Concerns)
+- High Cohesion, Loose Coupling
+

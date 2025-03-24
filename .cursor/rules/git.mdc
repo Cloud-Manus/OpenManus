@@ -1,0 +1,32 @@
+---
+description: Git commit and version control specifications
+globs: .git/*, *.git
+alwaysApply: false
+---
+# Git Specification
+## Commit Guidelines
+Git commit message format: [type]: [description]. For example: docs: update README.
+The following are the enumerated values for type:
+- feat: Add new feature
+- fix: Fix bug
+- docs: Documentation and comments
+- style: Code format (changes that do not affect code execution)
+- refactor: Refactoring, optimization (neither adding new features nor fixing bugs)
+- perf: Performance optimization
+- test: Add tests
+- chore: Changes to build process or auxiliary tools
+- revert: Rollback
+- build: Packaging
+
+## Branch Management
+- main/master: Main branch, keep in stable and releasable state
+- develop: Development branch, contains the latest development features
+- feature/*: Feature branches, used for developing new features
+- bugfix/*: Fix branches, used for fixing bugs
+- release/*: Release branches, used for preparing releases
+
+## Important Principles
+**Important**: Do not automatically commit git code unless explicitly instructed
+Ensure code passes all tests before committing
+Keep commit messages concise and clear, describing the changes accurately
+Avoid large commits, try to break changes into small, related commits
