@@ -40,6 +40,7 @@ class TaskManager:
     def __init__(self):
         self.tasks = {}
         self.queues = {}
+        self.running_tasks = {}  # Store running task coroutines
 
     def create_task(self, prompt: str) -> Task:
         task_id = str(uuid.uuid4())
@@ -49,6 +50,29 @@ class TaskManager:
         self.tasks[task_id] = task
         self.queues[task_id] = asyncio.Queue()
         return task
+
+    def store_running_task(self, task_id: str, task_coroutine):
+        """Store the running task coroutine for possible cancellation later"""
+        self.running_tasks[task_id] = task_coroutine
+
+    async def terminate_task(self, task_id: str) -> bool:
+        """Terminate a running task"""
+        if task_id not in self.tasks:
+            return False
+
+        # Cancel the running task if it exists
+        if task_id in self.running_tasks and not self.running_tasks[task_id].done():
+            self.running_tasks[task_id].cancel()
+
+            # Update task status
+            self.tasks[task_id].status = "terminated"
+
+            # Send termination event
+            await self.queues[task_id].put({"type": "status", "status": "terminated", "steps": self.tasks[task_id].steps})
+            await self.queues[task_id].put({"type": "complete", "terminated": True})
+
+            return True
+        return False
 
     async def update_task_step(
         self, task_id: str, step: int, result: str, step_type: str = "step"
@@ -92,7 +116,8 @@ async def download_file(file_path: str):
 @app.post("/tasks")
 async def create_task(prompt: str = Body(..., embed=True)):
     task = task_manager.create_task(prompt)
-    asyncio.create_task(run_task(task.id, prompt))
+    task_coroutine = asyncio.create_task(run_task(task.id, prompt))
+    task_manager.store_running_task(task.id, task_coroutine)
     return {"task_id": task.id}
 
 
@@ -258,6 +283,19 @@ def load_config():
         raise RuntimeError(
             f"The configuration file is missing necessary fields: {str(e)}"
         )
+
+
+@app.post("/tasks/{task_id}/terminate")
+async def terminate_task(task_id: str):
+    """Terminate a running task"""
+    if task_id not in task_manager.tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    success = await task_manager.terminate_task(task_id)
+    if success:
+        return {"status": "terminated", "task_id": task_id}
+    else:
+        return {"status": "not_running", "task_id": task_id, "message": "Task is not currently running"}
 
 
 if __name__ == "__main__":
