@@ -88,14 +88,14 @@ echo ""
 echo -e "${BLUE}Starting Docker image build...${NC}"
 docker build \
     --platform linux/$ARCH \
-    -t cloud-manus:$TAG \
+    -t openmanus:$TAG \
     --build-arg ARCH=$ARCH \
     .
 
 # Check build result
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}Build successful!${NC}"
-    echo -e "Image info: cloud-manus:$TAG ($ARCH)"
+    echo -e "Image info: openmanus:$TAG ($ARCH)"
 else
     echo -e "${RED}Build failed!${NC}"
     exit 1
