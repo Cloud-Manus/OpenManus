@@ -1,3 +1,4 @@
+import os
 import threading
 import tomllib
 from pathlib import Path
@@ -142,8 +143,67 @@ class Config:
         with config_path.open("rb") as f:
             return tomllib.load(f)
 
+    def _get_env_config(self) -> dict:
+        """load config from environment variables"""
+        env_config = {}
+        # LLM config.
+        if os.getenv("LLM_MODEL"):
+            env_config.setdefault("llm", {})
+            env_config["llm"]["model"] = os.getenv("LLM_MODEL")
+        if os.getenv("LLM_BASE_URL"):
+            env_config.setdefault("llm", {})
+            env_config["llm"]["base_url"] = os.getenv("LLM_BASE_URL")
+        if os.getenv("LLM_API_KEY"):
+            env_config.setdefault("llm", {})
+            env_config["llm"]["api_key"] = os.getenv("LLM_API_KEY")
+        if os.getenv("LLM_MAX_TOKENS"):
+            env_config.setdefault("llm", {})
+            env_config["llm"]["max_tokens"] = int(os.getenv("LLM_MAX_TOKENS"))
+        if os.getenv("LLM_TEMPERATURE"):
+            env_config.setdefault("llm", {})
+            env_config["llm"]["temperature"] = float(os.getenv("LLM_TEMPERATURE"))
+        if os.getenv("LLM_API_TYPE"):
+            env_config.setdefault("llm", {})
+            env_config["llm"]["api_type"] = os.getenv("LLM_API_TYPE")
+        if os.getenv("LLM_API_VERSION"):
+            env_config.setdefault("llm", {})
+            env_config["llm"]["api_version"] = os.getenv("LLM_API_VERSION")
+
+        # Browser config.
+        if os.getenv("BROWSER_HEADLESS"):
+            env_config.setdefault("browser", {})
+            env_config["browser"]["headless"] = (
+                os.getenv("BROWSER_HEADLESS").lower() == "true"
+            )
+        if os.getenv("BROWSER_DISABLE_SECURITY"):
+            env_config.setdefault("browser", {})
+            env_config["browser"]["disable_security"] = (
+                os.getenv("BROWSER_DISABLE_SECURITY").lower() == "true"
+            )
+
+        # Sandbox config.
+        if os.getenv("SANDBOX_USE_SANDBOX"):
+            env_config.setdefault("sandbox", {})
+            env_config["sandbox"]["use_sandbox"] = (
+                os.getenv("SANDBOX_USE_SANDBOX").lower() == "true"
+            )
+        if os.getenv("SANDBOX_IMAGE"):
+            env_config.setdefault("sandbox", {})
+            env_config["sandbox"]["image"] = os.getenv("SANDBOX_IMAGE")
+        if os.getenv("SANDBOX_MEMORY_LIMIT"):
+            env_config.setdefault("sandbox", {})
+            env_config["sandbox"]["memory_limit"] = os.getenv("SANDBOX_MEMORY_LIMIT")
+
+        return env_config
+
     def _load_initial_config(self):
+        # Load TOML config.
         raw_config = self._load_config()
+
+        # Load environment variables and merge.
+        env_config = self._get_env_config()
+        raw_config = self._merge_configs(raw_config, env_config)
+
         base_llm = raw_config.get("llm", {})
         llm_overrides = {
             k: v for k, v in raw_config.get("llm", {}).items() if isinstance(v, dict)
@@ -197,6 +257,7 @@ class Config:
         search_settings = None
         if search_config:
             search_settings = SearchSettings(**search_config)
+
         sandbox_config = raw_config.get("sandbox", {})
         if sandbox_config:
             sandbox_settings = SandboxSettings(**sandbox_config)
@@ -217,6 +278,22 @@ class Config:
         }
 
         self._config = AppConfig(**config_dict)
+
+    def _merge_configs(self, base_config: dict, override_config: dict) -> dict:
+        """Recursively merge two configuration dictionaries"""
+        merged = base_config.copy()
+
+        for key, value in override_config.items():
+            if (
+                key in merged
+                and isinstance(merged[key], dict)
+                and isinstance(value, dict)
+            ):
+                merged[key] = self._merge_configs(merged[key], value)
+            else:
+                merged[key] = value
+
+        return merged
 
     @property
     def llm(self) -> Dict[str, LLMSettings]:

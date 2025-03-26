@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import argparse
 import tomllib
 import uuid
 from datetime import datetime
@@ -68,7 +69,13 @@ class TaskManager:
             self.tasks[task_id].status = "terminated"
 
             # Send termination event
-            await self.queues[task_id].put({"type": "status", "status": "terminated", "steps": self.tasks[task_id].steps})
+            await self.queues[task_id].put(
+                {
+                    "type": "status",
+                    "status": "terminated",
+                    "steps": self.tasks[task_id].steps,
+                }
+            )
             await self.queues[task_id].put({"type": "complete", "terminated": True})
 
             return True
@@ -273,8 +280,10 @@ def load_config():
 
         with open(config_path, "rb") as f:
             config = tomllib.load(f)
-
-        return {"host": config["server"]["host"], "port": config["server"]["port"]}
+        if "server" in config:
+            return {"host": config["server"]["host"], "port": config["server"]["port"]}
+        else:
+            return {"host": "0.0.0.0", "port": 8000}
     except FileNotFoundError:
         raise RuntimeError(
             "Configuration file not found, please check if config/fig.toml exists"
@@ -295,11 +304,33 @@ async def terminate_task(task_id: str):
     if success:
         return {"status": "terminated", "task_id": task_id}
     else:
-        return {"status": "not_running", "task_id": task_id, "message": "Task is not currently running"}
+        return {
+            "status": "not_running",
+            "task_id": task_id,
+            "message": "Task is not currently running",
+        }
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    config = load_config()
-    uvicorn.run(app, host=config["host"], port=config["port"])
+    # create arg parser.
+    parser = argparse.ArgumentParser(description="start openmanus server")
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="Server listening address (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Server listening port (default: %(default)s)",
+    )
+
+    # parse command line arguments.
+    args = parser.parse_args()
+
+    # start the server.
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
