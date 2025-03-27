@@ -1,7 +1,7 @@
+import argparse
 import asyncio
 import json
 import os
-import argparse
 import tomllib
 import uuid
 from datetime import datetime
@@ -23,6 +23,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 class Task(BaseModel):
     id: str
