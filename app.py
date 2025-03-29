@@ -133,6 +133,7 @@ async def create_task(prompt: str = Body(..., embed=True)):
 
 
 from app.agent.manus import Manus
+from app.event_bus import event_bus
 
 
 async def run_task(task_id: str, prompt: str):
@@ -144,298 +145,89 @@ async def run_task(task_id: str, prompt: str):
             description="A versatile agent that can solve various tasks using multiple tools",
         )
 
-        # Register event handlers for direct event flow instead of log parsing
-        async def on_thinking(data):
-            await task_manager.update_task_step(
-                task_id, data["step"], data["content"], "think"
-            )
+        # 设置task_id，使其能传递事件到总线
+        agent.task_id = task_id
 
-        async def on_tool_select(data):
-            tools_str = ", ".join([tool["name"] for tool in data["tools"]])
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"Selected tools: {tools_str}",
-                "tool"
-            )
-
-        async def on_tool_execute(data):
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"Executing tool: {data['tool']}\nInput: {data['arguments']}",
-                "tool"
-            )
-
-        async def on_tool_result(data):
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"Result from {data['tool']}: {data['result']}",
-                "act"
-            )
-
-        async def on_state_change(data):
-            if data["to"] == "FINISHED":
-                await task_manager.update_task_step(
-                    task_id, 0, "Task completed successfully", "complete"
-                )
-
-        async def on_error(data):
-            await task_manager.update_task_step(
-                task_id, 0, f"Error: {data['message']}", "error"
-            )
-
-        async def on_step_complete(data):
-            await task_manager.update_task_step(
-                task_id, data["step"], f"Step {data['step']}/{data['max_steps']} complete", "step"
-            )
-
-        async def on_task_complete(data):
-            await task_manager.complete_task(task_id)
-
-        async def on_browser_state(data):
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"Browser at: {data['url']} - {data['title']}",
-                "browser"
-            )
-
-        async def on_manus_context(data):
-            browser_status = "using browser" if data["browser_in_use"] else "not using browser"
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"Context update: {browser_status}, messages: {data['message_count']}",
-                "context"
-            )
-
-        # 计划相关事件处理器
-        async def on_plan_status(data):
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"Plan status updated - current step: {data['current_step_index'] if data['current_step_index'] is not None else 'N/A'}",
-                "plan"
-            )
-
-        async def on_plan_step(data):
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"Plan step {data['step_index']} using {data['tool_name']}",
-                "plan_step"
-            )
-
-        async def on_plan_step_completed(data):
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"Completed plan step {data['step_index']} with {data['tool_name']}",
-                "plan_step"
-            )
-
-        # MCP相关事件处理器
-        async def on_mcp_connected(data):
-            await task_manager.update_task_step(
-                task_id,
-                0,
-                f"Connected to MCP via {data['connection_type']} with {data['tools_count']} tools",
-                "mcp"
-            )
-
-        async def on_mcp_disconnected(data):
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"MCP disconnected: {data['reason']}",
-                "mcp"
-            )
-
-        async def on_mcp_tools_changed(data):
-            added = ", ".join(data["tools_added"]) if data["tools_added"] else "none"
-            removed = ", ".join(data["tools_removed"]) if data["tools_removed"] else "none"
-            await task_manager.update_task_step(
-                task_id,
-                data["step"],
-                f"MCP tools changed - Added: {added}, Removed: {removed}",
-                "mcp"
-            )
-
-        # 流程相关事件处理器
-        async def on_flow_start(data):
-            await task_manager.update_task_step(
-                task_id,
-                0,
-                f"Flow started with input: {data['input'][:50]}{'...' if len(data['input']) > 50 else ''}",
-                "flow"
-            )
-
-        async def on_flow_step(data):
-            agent_info = f" via agent {data['agent_key']}" if "agent_key" in data else ""
-            step_info = f" - step {data['step']}" if "step" in data else ""
-            await task_manager.update_task_step(
-                task_id,
-                0,
-                f"Flow step executed{agent_info}{step_info}",
-                "flow_step"
-            )
-
-        async def on_flow_agent_switch(data):
-            await task_manager.update_task_step(
-                task_id,
-                0,
-                f"Switching from agent {data['from_agent']} to {data['to_agent']} for step {data['step_index']}",
-                "flow"
-            )
-
-        async def on_flow_complete(data):
-            await task_manager.update_task_step(
-                task_id,
-                0,
-                "Flow execution completed",
-                "flow"
-            )
-
-        async def on_flow_error(data):
-            await task_manager.update_task_step(
-                task_id,
-                0,
-                f"Flow error: {data['error']} - {data['message']}",
-                "error"
-            )
-
-        async def on_plan_create(data):
-            status = data["status"]
-            status_text = {
-                "starting": "Creating plan...",
-                "completed": "Plan created successfully",
-                "completed_default": "Default plan created",
-            }.get(status, status)
-
-            await task_manager.update_task_step(
-                task_id,
-                0,
-                f"Plan {data['plan_id']}: {status_text}",
-                "plan"
-            )
-
-        async def on_plan_update(data):
-            await task_manager.update_task_step(
-                task_id,
-                0,
-                f"Plan step {data['step_index']} status changed to: {data['status']}",
-                "plan"
-            )
-
-        # Register all event handlers
-        agent.register_event_handler("thinking", on_thinking)
-        agent.register_event_handler("tool_select", on_tool_select)
-        agent.register_event_handler("tool_execute", on_tool_execute)
-        agent.register_event_handler("tool_result", on_tool_result)
-        agent.register_event_handler("state_change", on_state_change)
-        agent.register_event_handler("error", on_error)
-        agent.register_event_handler("step_complete", on_step_complete)
-        agent.register_event_handler("task_complete", on_task_complete)
-        agent.register_event_handler("browser_state", on_browser_state)
-        agent.register_event_handler("manus_context", on_manus_context)
-        agent.register_event_handler("plan_status", on_plan_status)
-        agent.register_event_handler("plan_step", on_plan_step)
-        agent.register_event_handler("plan_step_completed", on_plan_step_completed)
-        agent.register_event_handler("mcp_connected", on_mcp_connected)
-        agent.register_event_handler("mcp_disconnected", on_mcp_disconnected)
-        agent.register_event_handler("mcp_tools_changed", on_mcp_tools_changed)
-
-        # 注册流程事件处理器 (如果是使用flow的情况)
-        if hasattr(agent, "register_flow_handlers"):
-            agent.register_flow_handlers({
-                "flow_start": on_flow_start,
-                "flow_step": on_flow_step,
-                "flow_agent_switch": on_flow_agent_switch,
-                "flow_complete": on_flow_complete,
-                "flow_error": on_flow_error,
-                "plan_create": on_plan_create,
-                "plan_update": on_plan_update,
-                "plan_step_start": on_plan_step,
-                "plan_step_complete": on_plan_step_completed,
-            })
-
-        # Keep a basic log handler for console output
+        # 保留基本日志处理器用于控制台输出
         from app.logger import logger
 
-        # We still keep the log handler for backward compatibility and debugging
-        class SSELogHandler:
-            def __init__(self, task_id):
-                self.task_id = task_id
-
+        # 简化的日志处理器，仅用于调试
+        class SimplifiedLogHandler:
             async def __call__(self, message):
-                import re
+                # 仅打印到控制台，不再发送到前端
+                print(f"Log: {message}")
 
-                # Extract - Subsequent Content
-                cleaned_message = re.sub(r"^.*? - ", "", message)
+        logger.add(SimplifiedLogHandler())
 
-                # Simple log entries (these are now secondary to the event system)
-                await task_manager.update_task_step(
-                    self.task_id, 0, cleaned_message, "log"
-                )
-
-        sse_handler = SSELogHandler(task_id)
-        logger.add(sse_handler)
-
+        # 执行代理任务
         result = await agent.run(prompt)
-        await task_manager.update_task_step(task_id, 1, result, "result")
+
+        # 更新任务状态为完成
+        task_manager.tasks[task_id].status = "completed"
+
+        # 发送最终结果事件
+        await event_bus.emit(task_id, "task_result", {
+            "result": result,
+            "status": "completed"
+        })
+
     except Exception as e:
-        await task_manager.fail_task(task_id, str(e))
+        # 更新任务状态为失败
+        if task_id in task_manager.tasks:
+            task_manager.tasks[task_id].status = f"failed: {str(e)}"
+
+        # 发送错误事件
+        await event_bus.emit(task_id, "task_error", {
+            "error": str(e)
+        })
 
 
 @app.get("/tasks/{task_id}/events")
 async def task_events(task_id: str):
     async def event_generator():
-        if task_id not in task_manager.queues:
+        if task_id not in task_manager.tasks:
             yield f"event: error\ndata: {dumps({'message': 'Task not found'})}\n\n"
             return
 
-        queue = task_manager.queues[task_id]
-
+        # 获取当前任务状态
         task = task_manager.tasks.get(task_id)
         if task:
-            yield f"event: status\ndata: {dumps({'type': 'status', 'status': task.status, 'steps': task.steps})}\n\n"
+            yield f"event: status\ndata: {dumps({'type': 'status', 'status': task.status})}\n\n"
 
-        while True:
-            try:
+        # 从事件总线注册队列
+        from app.event_bus import event_bus
+        queue = event_bus.register_task(task_id)
+
+        try:
+            while True:
+                # 等待事件
                 event = await queue.get()
-                formatted_event = dumps(event)
+                event_type = event["type"]
+                data = event["data"]
 
+                # 格式化事件数据
+                formatted_data = dumps(data)
+
+                # 发送事件
+                yield f"event: {event_type}\ndata: {formatted_data}\n\n"
+
+                # 心跳
                 yield ": heartbeat\n\n"
 
-                if event["type"] == "complete":
-                    yield f"event: complete\ndata: {formatted_event}\n\n"
+                # 如果任务完成或失败，结束事件流
+                if event_type in ["task_complete", "task_result", "task_error"] or \
+                   task_manager.tasks[task_id].status in ["completed", "failed", "terminated"]:
+                    yield f"event: complete\ndata: {dumps({'completed': True})}\n\n"
                     break
-                elif event["type"] == "error":
-                    yield f"event: error\ndata: {formatted_event}\n\n"
-                    break
-                elif event["type"] == "step":
-                    task = task_manager.tasks.get(task_id)
-                    if task:
-                        yield f"event: status\ndata: {dumps({'type': 'status', 'status': task.status, 'steps': task.steps})}\n\n"
-                    yield f"event: {event['type']}\ndata: {formatted_event}\n\n"
-                # 支持所有可能的事件类型
-                elif event["type"] in [
-                    "think", "tool", "act", "run", "browser", "context", "log",
-                    "plan", "plan_step", "mcp", "flow", "flow_step"
-                ]:
-                    yield f"event: {event['type']}\ndata: {formatted_event}\n\n"
-                else:
-                    yield f"event: {event['type']}\ndata: {formatted_event}\n\n"
 
-            except asyncio.CancelledError:
-                print(f"Client disconnected for task {task_id}")
-                break
-            except Exception as e:
-                print(f"Error in event stream: {str(e)}")
-                yield f"event: error\ndata: {dumps({'message': str(e)})}\n\n"
-                break
+        except asyncio.CancelledError:
+            print(f"Client disconnected for task {task_id}")
+        except Exception as e:
+            print(f"Error in event stream: {str(e)}")
+            yield f"event: error\ndata: {dumps({'message': str(e)})}\n\n"
+        finally:
+            # 清理
+            event_bus.unregister_queue(task_id, queue)
 
     return StreamingResponse(
         event_generator(),

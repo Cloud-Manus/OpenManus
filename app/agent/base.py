@@ -102,18 +102,37 @@ class BaseAgent(BaseModel, ABC):
         self.event_callbacks[event_type].append(callback)
 
     async def emit_event(self, event_type: str, data: Any) -> None:
-        """Emit an event to all registered handlers for that event type.
+        """Emit an event to all registered handlers and the event bus.
 
         Args:
             event_type: Type of event to emit
             data: Event data to pass to handlers
         """
+        # 1. 发送到注册的处理器（保持现有逻辑以保证兼容）
         if event_type in self.event_callbacks:
             for callback in self.event_callbacks[event_type]:
                 try:
                     await callback(data)
                 except Exception as e:
                     logger.error(f"Error in event handler for {event_type}: {str(e)}")
+
+        # 2. 发送到事件总线（直接透传给前端）
+        if hasattr(self, 'task_id') and self.task_id:
+            # 添加来源信息
+            enhanced_data = {
+                "source": "agent",
+                "agent": self.name,
+                "event_type": event_type,
+                **data
+            } if isinstance(data, dict) else {
+                "source": "agent",
+                "agent": self.name,
+                "event_type": event_type,
+                "data": data
+            }
+
+            from app.event_bus import event_bus
+            await event_bus.emit(self.task_id, event_type, enhanced_data)
 
     @asynccontextmanager
     async def state_context(self, new_state: AgentState):

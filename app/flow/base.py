@@ -73,18 +73,37 @@ class BaseFlow(BaseModel, ABC):
         self.event_callbacks[event_type].append(callback)
 
     async def emit_event(self, event_type: str, data: Any) -> None:
-        """发送事件到所有注册的处理器
+        """发送事件到所有注册的处理器和事件总线
 
         Args:
             event_type: 事件类型
             data: 事件数据
         """
+        # 1. 发送到注册的处理器（保持现有逻辑以保证兼容）
         if event_type in self.event_callbacks:
             for callback in self.event_callbacks[event_type]:
                 try:
                     await callback(data)
                 except Exception as e:
                     logger.error(f"事件处理器错误 {event_type}: {str(e)}")
+
+        # 2. 发送到事件总线（直接透传给前端）
+        if hasattr(self, 'task_id') and self.task_id:
+            # 添加来源信息
+            enhanced_data = {
+                "source": "flow",
+                "flow_type": self.__class__.__name__,
+                "event_type": event_type,
+                **data
+            } if isinstance(data, dict) else {
+                "source": "flow",
+                "flow_type": self.__class__.__name__,
+                "event_type": event_type,
+                "data": data
+            }
+
+            from app.event_bus import event_bus
+            await event_bus.emit(self.task_id, event_type, enhanced_data)
 
     def register_agent_events(self, agent_key: str, flow_event_map: Dict[str, str] = None) -> None:
         """将代理事件映射到流程事件

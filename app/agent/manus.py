@@ -98,6 +98,10 @@ class Manus(BrowserAgent):
         # 创建流程实例
         flow = FlowFactory.create_flow(flow_type, {"manus": self})
 
+        # 传递task_id（如果存在）
+        if hasattr(self, 'task_id'):
+            flow.task_id = self.task_id
+
         # 注册事件处理器
         for event_type, handler in self.flow_event_handlers.items():
             flow.register_event_handler(event_type, handler)
