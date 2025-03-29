@@ -97,6 +97,9 @@ class PlanningFlow(BaseFlow):
             if not self.primary_agent:
                 raise ValueError("No primary agent available")
 
+            # 发出流程开始事件
+            await self.emit_event("flow_start", {"input": input_text})
+
             # Create initial plan if input provided
             if input_text:
                 await self._create_initial_plan(input_text)
@@ -106,6 +109,10 @@ class PlanningFlow(BaseFlow):
                     logger.error(
                         f"Plan creation failed. Plan ID {self.active_plan_id} not found in planning tool."
                     )
+                    await self.emit_event("flow_error", {
+                        "error": "plan_creation_failed",
+                        "message": f"Failed to create plan for: {input_text}"
+                    })
                     return f"Failed to create plan for: {input_text}"
 
             result = ""
@@ -118,24 +125,69 @@ class PlanningFlow(BaseFlow):
                     result += await self._finalize_plan()
                     break
 
+                # 发出计划步骤开始事件
+                await self.emit_event("plan_step_start", {
+                    "plan_id": self.active_plan_id,
+                    "step_index": self.current_step_index,
+                    "step_info": step_info
+                })
+
                 # Execute current step with appropriate agent
                 step_type = step_info.get("type") if step_info else None
                 executor = self.get_executor(step_type)
+
+                # 发出代理切换事件
+                await self.emit_event("flow_agent_switch", {
+                    "from_agent": self.primary_agent_key,
+                    "to_agent": next((k for k, v in self.agents.items() if v == executor), "unknown"),
+                    "step_index": self.current_step_index,
+                    "step_type": step_type
+                })
+
                 step_result = await self._execute_step(executor, step_info)
+
+                # 发出计划步骤完成事件
+                await self.emit_event("plan_step_complete", {
+                    "plan_id": self.active_plan_id,
+                    "step_index": self.current_step_index,
+                    "step_info": step_info,
+                    "result": step_result
+                })
+
                 result += step_result + "\n"
 
                 # Check if agent wants to terminate
                 if hasattr(executor, "state") and executor.state == AgentState.FINISHED:
                     break
 
+            # 发出流程完成事件
+            await self.emit_event("flow_complete", {
+                "plan_id": self.active_plan_id,
+                "result": result
+            })
+
             return result
         except Exception as e:
             logger.error(f"Error in PlanningFlow: {str(e)}")
+
+            # 发出流程错误事件
+            await self.emit_event("flow_error", {
+                "error": type(e).__name__,
+                "message": str(e)
+            })
+
             return f"Execution failed: {str(e)}"
 
     async def _create_initial_plan(self, request: str) -> None:
         """Create an initial plan based on the request using the flow's LLM and PlanningTool."""
         logger.info(f"Creating initial plan with ID: {self.active_plan_id}")
+
+        # 发出计划创建开始事件
+        await self.emit_event("plan_create", {
+            "plan_id": self.active_plan_id,
+            "request": request,
+            "status": "starting"
+        })
 
         # Create a system message for plan creation
         system_message = Message.system_message(
@@ -158,6 +210,7 @@ class PlanningFlow(BaseFlow):
         )
 
         # Process tool calls if present
+        plan_created = False
         if response.tool_calls:
             for tool_call in response.tool_calls:
                 if tool_call.function.name == "planning":
@@ -176,14 +229,23 @@ class PlanningFlow(BaseFlow):
                     # Execute the tool via ToolCollection instead of directly
                     result = await self.planning_tool.execute(**args)
 
+                    # 发出计划创建完成事件
+                    await self.emit_event("plan_create", {
+                        "plan_id": self.active_plan_id,
+                        "request": request,
+                        "status": "completed",
+                        "result": str(result)
+                    })
+
                     logger.info(f"Plan creation result: {str(result)}")
+                    plan_created = True
                     return
 
         # If execution reached here, create a default plan
         logger.warning("Creating default plan")
 
         # Create default plan using the ToolCollection
-        await self.planning_tool.execute(
+        result = await self.planning_tool.execute(
             **{
                 "command": "create",
                 "plan_id": self.active_plan_id,
@@ -191,6 +253,16 @@ class PlanningFlow(BaseFlow):
                 "steps": ["Analyze request", "Execute task", "Verify results"],
             }
         )
+
+        # 发出计划创建完成事件 (默认计划)
+        await self.emit_event("plan_create", {
+            "plan_id": self.active_plan_id,
+            "request": request,
+            "status": "completed_default",
+            "result": str(result)
+        })
+
+        plan_created = True
 
     async def _get_current_step_info(self) -> tuple[Optional[int], Optional[dict]]:
         """
@@ -256,65 +328,84 @@ class PlanningFlow(BaseFlow):
             logger.warning(f"Error finding current step index: {e}")
             return None, None
 
-    async def _execute_step(self, executor: BaseAgent, step_info: dict) -> str:
-        """Execute the current step with the specified agent using agent.run()."""
-        # Prepare context for the agent with current plan status
-        plan_status = await self._get_plan_text()
-        step_text = step_info.get("text", f"Step {self.current_step_index}")
+    async def _execute_step(self, executor: BaseAgent, step_info: Optional[dict]) -> str:
+        """Execute a single step with the appropriate agent."""
+        step_desc = step_info.get("description", "") if step_info else "Unknown step"
+        logger.info(f"Executing step {self.current_step_index}: {step_desc}")
 
-        # Create a prompt for the agent to execute the current step
-        step_prompt = f"""
-        CURRENT PLAN STATUS:
-        {plan_status}
+        # Update step status to in progress
+        await self.planning_tool.execute(
+            **{
+                "command": "mark_step",
+                "plan_id": self.active_plan_id,
+                "step_index": self.current_step_index,
+                "step_status": PlanStepStatus.IN_PROGRESS.value,
+            }
+        )
 
-        YOUR CURRENT TASK:
-        You are now working on step {self.current_step_index}: "{step_text}"
+        # 发出计划更新事件
+        await self.emit_event("plan_update", {
+            "plan_id": self.active_plan_id,
+            "step_index": self.current_step_index,
+            "status": PlanStepStatus.IN_PROGRESS.value
+        })
 
-        Please execute this step using the appropriate tools. When you're done, provide a summary of what you accomplished.
-        """
+        # Set executor context with current step
+        if hasattr(executor, "next_step_prompt"):
+            step_context = f"Current step: {step_desc}\n\nFollow these instructions:"
+            executor.next_step_prompt = step_context
 
-        # Use agent.run() to execute the step
+        # Reset executor memory or state as needed
+        if hasattr(executor, "memory") and hasattr(executor.memory, "messages"):
+            # Keep only user messages
+            executor.memory.messages = [
+                msg for msg in executor.memory.messages if msg.role == "user"
+            ]
+
+        # Execute the step with the agent
         try:
-            step_result = await executor.run(step_prompt)
+            result = await executor.run(step_desc)
 
-            # Mark the step as completed after successful execution
-            await self._mark_step_completed()
-
-            return step_result
-        except Exception as e:
-            logger.error(f"Error executing step {self.current_step_index}: {e}")
-            return f"Error executing step {self.current_step_index}: {str(e)}"
-
-    async def _mark_step_completed(self) -> None:
-        """Mark the current step as completed."""
-        if self.current_step_index is None:
-            return
-
-        try:
-            # Mark the step as completed
+            # Mark step as completed on success
             await self.planning_tool.execute(
-                command="mark_step",
-                plan_id=self.active_plan_id,
-                step_index=self.current_step_index,
-                step_status=PlanStepStatus.COMPLETED.value,
+                **{
+                    "command": "mark_step",
+                    "plan_id": self.active_plan_id,
+                    "step_index": self.current_step_index,
+                    "step_status": PlanStepStatus.COMPLETED.value,
+                }
             )
-            logger.info(
-                f"Marked step {self.current_step_index} as completed in plan {self.active_plan_id}"
-            )
+
+            # 发出计划更新事件
+            await self.emit_event("plan_update", {
+                "plan_id": self.active_plan_id,
+                "step_index": self.current_step_index,
+                "status": PlanStepStatus.COMPLETED.value
+            })
+
+            return result
         except Exception as e:
-            logger.warning(f"Failed to update plan status: {e}")
-            # Update step status directly in planning tool storage
-            if self.active_plan_id in self.planning_tool.plans:
-                plan_data = self.planning_tool.plans[self.active_plan_id]
-                step_statuses = plan_data.get("step_statuses", [])
+            logger.error(f"Step execution failed: {str(e)}")
 
-                # Ensure the step_statuses list is long enough
-                while len(step_statuses) <= self.current_step_index:
-                    step_statuses.append(PlanStepStatus.NOT_STARTED.value)
+            # Mark step as blocked on failure
+            await self.planning_tool.execute(
+                **{
+                    "command": "mark_step",
+                    "plan_id": self.active_plan_id,
+                    "step_index": self.current_step_index,
+                    "step_status": PlanStepStatus.BLOCKED.value,
+                }
+            )
 
-                # Update the status
-                step_statuses[self.current_step_index] = PlanStepStatus.COMPLETED.value
-                plan_data["step_statuses"] = step_statuses
+            # 发出计划更新事件 (失败)
+            await self.emit_event("plan_update", {
+                "plan_id": self.active_plan_id,
+                "step_index": self.current_step_index,
+                "status": PlanStepStatus.BLOCKED.value,
+                "error": str(e)
+            })
+
+            return f"Step execution failed: {str(e)}"
 
     async def _get_plan_text(self) -> str:
         """Get the current plan as formatted text."""

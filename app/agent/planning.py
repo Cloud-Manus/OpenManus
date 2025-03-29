@@ -51,8 +51,9 @@ class PlanningAgent(ToolCallAgent):
 
     async def think(self) -> bool:
         """Decide the next action based on plan status."""
+        plan_status = await self.get_plan()
         prompt = (
-            f"CURRENT PLAN STATUS:\n{await self.get_plan()}\n\n{self.next_step_prompt}"
+            f"CURRENT PLAN STATUS:\n{plan_status}\n\n{self.next_step_prompt}"
             if self.active_plan_id
             else self.next_step_prompt
         )
@@ -60,6 +61,14 @@ class PlanningAgent(ToolCallAgent):
 
         # Get the current step index before thinking
         self.current_step_index = await self._get_current_step_index()
+
+        # Emit plan status event
+        await self.emit_event("plan_status", {
+            "plan_id": self.active_plan_id,
+            "plan_content": plan_status,
+            "current_step_index": self.current_step_index,
+            "step": self.current_step
+        })
 
         result = await super().think()
 
@@ -78,6 +87,15 @@ class PlanningAgent(ToolCallAgent):
                     "status": "pending",  # Will be updated after execution
                 }
 
+                # Emit plan step event
+                await self.emit_event("plan_step", {
+                    "plan_id": self.active_plan_id,
+                    "step_index": self.current_step_index,
+                    "tool_name": latest_tool_call.function.name,
+                    "status": "pending",
+                    "step": self.current_step
+                })
+
         return result
 
     async def act(self) -> str:
@@ -92,6 +110,17 @@ class PlanningAgent(ToolCallAgent):
             if latest_tool_call.id in self.step_execution_tracker:
                 self.step_execution_tracker[latest_tool_call.id]["status"] = "completed"
                 self.step_execution_tracker[latest_tool_call.id]["result"] = result
+
+                step_data = self.step_execution_tracker[latest_tool_call.id]
+
+                # Emit plan step completed event
+                await self.emit_event("plan_step_completed", {
+                    "plan_id": self.active_plan_id,
+                    "step_index": step_data["step_index"],
+                    "tool_name": step_data["tool_name"],
+                    "result": result,
+                    "step": self.current_step
+                })
 
                 # Update the plan status if this was a non-planning, non-special tool
                 if (

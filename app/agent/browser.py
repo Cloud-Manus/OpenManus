@@ -111,6 +111,15 @@ class BrowserAgent(ToolCallAgent):
                 )
                 self.memory.add_message(image_message)
 
+            # Emit browser state event
+            await self.emit_event("browser_state", {
+                "url": browser_state.get('url', 'N/A'),
+                "title": browser_state.get('title', 'N/A'),
+                "tabs_count": len(browser_state.get("tabs", [])),
+                "has_screenshot": bool(self._current_base64_image),
+                "step": self.current_step
+            })
+
         # Replace placeholders with actual browser state info
         self.next_step_prompt = NEXT_STEP_PROMPT.format(
             url_placeholder=url_info,

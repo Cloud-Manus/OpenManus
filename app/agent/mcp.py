@@ -4,7 +4,8 @@ from pydantic import Field
 
 from app.agent.toolcall import ToolCallAgent
 from app.logger import logger
-from app.prompt.mcp import MULTIMEDIA_RESPONSE_PROMPT, NEXT_STEP_PROMPT, SYSTEM_PROMPT
+from app.prompt.mcp import (MULTIMEDIA_RESPONSE_PROMPT, NEXT_STEP_PROMPT,
+                            SYSTEM_PROMPT)
 from app.schema import AgentState, Message
 from app.tool.base import ToolResult
 from app.tool.mcp import MCPClients
@@ -71,7 +72,16 @@ class MCPAgent(ToolCallAgent):
         self.available_tools = self.mcp_clients
 
         # Store initial tool schemas
-        await self._refresh_tools()
+        tool_additions, tool_removals = await self._refresh_tools()
+
+        # Emit MCP connection event
+        await self.emit_event("mcp_connected", {
+            "connection_type": self.connection_type,
+            "server_url": server_url if self.connection_type == "sse" else None,
+            "command": command if self.connection_type == "stdio" else None,
+            "tools_count": len(self.mcp_clients.tool_map),
+            "tools_added": tool_additions
+        })
 
         # Add system message about available tools
         tool_names = list(self.mcp_clients.tool_map.keys())
@@ -137,15 +147,32 @@ class MCPAgent(ToolCallAgent):
         if not self.mcp_clients.session or not self.mcp_clients.tool_map:
             logger.info("MCP service is no longer available, ending interaction")
             self.state = AgentState.FINISHED
+            await self.emit_event("mcp_disconnected", {
+                "reason": "service_unavailable",
+                "step": self.current_step
+            })
             return False
 
         # Refresh tools periodically
         if self.current_step % self._refresh_tools_interval == 0:
-            await self._refresh_tools()
+            tool_additions, tool_removals = await self._refresh_tools()
+
+            # Emit tool change event if needed
+            if tool_additions or tool_removals:
+                await self.emit_event("mcp_tools_changed", {
+                    "tools_added": tool_additions,
+                    "tools_removed": tool_removals,
+                    "step": self.current_step
+                })
+
             # All tools removed indicates shutdown
             if not self.mcp_clients.tool_map:
                 logger.info("MCP service has shut down, ending interaction")
                 self.state = AgentState.FINISHED
+                await self.emit_event("mcp_disconnected", {
+                    "reason": "service_shutdown",
+                    "step": self.current_step
+                })
                 return False
 
         # Use the parent class's think method
@@ -174,6 +201,10 @@ class MCPAgent(ToolCallAgent):
         if self.mcp_clients.session:
             await self.mcp_clients.disconnect()
             logger.info("MCP connection closed")
+            await self.emit_event("mcp_disconnected", {
+                "reason": "cleanup",
+                "step": self.current_step
+            })
 
     async def run(self, request: Optional[str] = None) -> str:
         """Run the agent with cleanup when done."""

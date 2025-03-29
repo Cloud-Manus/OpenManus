@@ -7,9 +7,9 @@ from app.agent.react import ReActAgent
 from app.exceptions import TokenLimitExceeded
 from app.logger import logger
 from app.prompt.toolcall import NEXT_STEP_PROMPT, SYSTEM_PROMPT
-from app.schema import TOOL_CHOICE_TYPE, AgentState, Message, ToolCall, ToolChoice
+from app.schema import (TOOL_CHOICE_TYPE, AgentState, Message, ToolCall,
+                        ToolChoice)
 from app.tool import CreateChatCompletion, Terminate, ToolCollection
-
 
 TOOL_CALL_REQUIRED = "Tool calls required but none provided"
 
@@ -68,6 +68,10 @@ class ToolCallAgent(ReActAgent):
                     )
                 )
                 self.state = AgentState.FINISHED
+                await self.emit_event("error", {
+                    "error_type": "token_limit",
+                    "message": str(token_limit_error)
+                })
                 return False
             raise
 
@@ -81,11 +85,31 @@ class ToolCallAgent(ReActAgent):
         logger.info(
             f"🛠️ {self.name} selected {len(tool_calls) if tool_calls else 0} tools to use"
         )
+
+        # Emit thinking event
+        await self.emit_event("thinking", {
+            "content": content,
+            "step": self.current_step
+        })
+
         if tool_calls:
             logger.info(
                 f"🧰 Tools being prepared: {[call.function.name for call in tool_calls]}"
             )
             logger.info(f"🔧 Tool arguments: {tool_calls[0].function.arguments}")
+
+            # Emit tool selection event
+            await self.emit_event("tool_select", {
+                "tools": [
+                    {
+                        "name": call.function.name,
+                        "arguments": call.function.arguments,
+                        "id": call.id
+                    }
+                    for call in tool_calls
+                ],
+                "step": self.current_step
+            })
 
         try:
             if response is None:
@@ -125,6 +149,11 @@ class ToolCallAgent(ReActAgent):
                     f"Error encountered while processing: {str(e)}"
                 )
             )
+            await self.emit_event("error", {
+                "error_type": "thinking_error",
+                "message": str(e),
+                "step": self.current_step
+            })
             return False
 
     async def act(self) -> str:
@@ -141,6 +170,14 @@ class ToolCallAgent(ReActAgent):
             # Reset base64_image for each tool call
             self._current_base64_image = None
 
+            # Emit tool execution event
+            await self.emit_event("tool_execute", {
+                "tool": command.function.name,
+                "arguments": command.function.arguments,
+                "id": command.id,
+                "step": self.current_step
+            })
+
             result = await self.execute_tool(command)
 
             if self.max_observe:
@@ -149,6 +186,14 @@ class ToolCallAgent(ReActAgent):
             logger.info(
                 f"🎯 Tool '{command.function.name}' completed its mission! Result: {result}"
             )
+
+            # Emit tool result event
+            await self.emit_event("tool_result", {
+                "tool": command.function.name,
+                "id": command.id,
+                "result": result,
+                "step": self.current_step
+            })
 
             # Add tool response to memory
             tool_msg = Message.tool_message(

@@ -144,24 +144,227 @@ async def run_task(task_id: str, prompt: str):
             description="A versatile agent that can solve various tasks using multiple tools",
         )
 
-        async def on_think(thought):
-            await task_manager.update_task_step(task_id, 0, thought, "think")
-
-        async def on_tool_execute(tool, input):
+        # Register event handlers for direct event flow instead of log parsing
+        async def on_thinking(data):
             await task_manager.update_task_step(
-                task_id, 0, f"Executing tool: {tool}\nInput: {input}", "tool"
+                task_id, data["step"], data["content"], "think"
             )
 
-        async def on_action(action):
+        async def on_tool_select(data):
+            tools_str = ", ".join([tool["name"] for tool in data["tools"]])
             await task_manager.update_task_step(
-                task_id, 0, f"Executing action: {action}", "act"
+                task_id,
+                data["step"],
+                f"Selected tools: {tools_str}",
+                "tool"
             )
 
-        async def on_run(step, result):
-            await task_manager.update_task_step(task_id, step, result, "run")
+        async def on_tool_execute(data):
+            await task_manager.update_task_step(
+                task_id,
+                data["step"],
+                f"Executing tool: {data['tool']}\nInput: {data['arguments']}",
+                "tool"
+            )
 
+        async def on_tool_result(data):
+            await task_manager.update_task_step(
+                task_id,
+                data["step"],
+                f"Result from {data['tool']}: {data['result']}",
+                "act"
+            )
+
+        async def on_state_change(data):
+            if data["to"] == "FINISHED":
+                await task_manager.update_task_step(
+                    task_id, 0, "Task completed successfully", "complete"
+                )
+
+        async def on_error(data):
+            await task_manager.update_task_step(
+                task_id, 0, f"Error: {data['message']}", "error"
+            )
+
+        async def on_step_complete(data):
+            await task_manager.update_task_step(
+                task_id, data["step"], f"Step {data['step']}/{data['max_steps']} complete", "step"
+            )
+
+        async def on_task_complete(data):
+            await task_manager.complete_task(task_id)
+
+        async def on_browser_state(data):
+            await task_manager.update_task_step(
+                task_id,
+                data["step"],
+                f"Browser at: {data['url']} - {data['title']}",
+                "browser"
+            )
+
+        async def on_manus_context(data):
+            browser_status = "using browser" if data["browser_in_use"] else "not using browser"
+            await task_manager.update_task_step(
+                task_id,
+                data["step"],
+                f"Context update: {browser_status}, messages: {data['message_count']}",
+                "context"
+            )
+
+        # 计划相关事件处理器
+        async def on_plan_status(data):
+            await task_manager.update_task_step(
+                task_id,
+                data["step"],
+                f"Plan status updated - current step: {data['current_step_index'] if data['current_step_index'] is not None else 'N/A'}",
+                "plan"
+            )
+
+        async def on_plan_step(data):
+            await task_manager.update_task_step(
+                task_id,
+                data["step"],
+                f"Plan step {data['step_index']} using {data['tool_name']}",
+                "plan_step"
+            )
+
+        async def on_plan_step_completed(data):
+            await task_manager.update_task_step(
+                task_id,
+                data["step"],
+                f"Completed plan step {data['step_index']} with {data['tool_name']}",
+                "plan_step"
+            )
+
+        # MCP相关事件处理器
+        async def on_mcp_connected(data):
+            await task_manager.update_task_step(
+                task_id,
+                0,
+                f"Connected to MCP via {data['connection_type']} with {data['tools_count']} tools",
+                "mcp"
+            )
+
+        async def on_mcp_disconnected(data):
+            await task_manager.update_task_step(
+                task_id,
+                data["step"],
+                f"MCP disconnected: {data['reason']}",
+                "mcp"
+            )
+
+        async def on_mcp_tools_changed(data):
+            added = ", ".join(data["tools_added"]) if data["tools_added"] else "none"
+            removed = ", ".join(data["tools_removed"]) if data["tools_removed"] else "none"
+            await task_manager.update_task_step(
+                task_id,
+                data["step"],
+                f"MCP tools changed - Added: {added}, Removed: {removed}",
+                "mcp"
+            )
+
+        # 流程相关事件处理器
+        async def on_flow_start(data):
+            await task_manager.update_task_step(
+                task_id,
+                0,
+                f"Flow started with input: {data['input'][:50]}{'...' if len(data['input']) > 50 else ''}",
+                "flow"
+            )
+
+        async def on_flow_step(data):
+            agent_info = f" via agent {data['agent_key']}" if "agent_key" in data else ""
+            step_info = f" - step {data['step']}" if "step" in data else ""
+            await task_manager.update_task_step(
+                task_id,
+                0,
+                f"Flow step executed{agent_info}{step_info}",
+                "flow_step"
+            )
+
+        async def on_flow_agent_switch(data):
+            await task_manager.update_task_step(
+                task_id,
+                0,
+                f"Switching from agent {data['from_agent']} to {data['to_agent']} for step {data['step_index']}",
+                "flow"
+            )
+
+        async def on_flow_complete(data):
+            await task_manager.update_task_step(
+                task_id,
+                0,
+                "Flow execution completed",
+                "flow"
+            )
+
+        async def on_flow_error(data):
+            await task_manager.update_task_step(
+                task_id,
+                0,
+                f"Flow error: {data['error']} - {data['message']}",
+                "error"
+            )
+
+        async def on_plan_create(data):
+            status = data["status"]
+            status_text = {
+                "starting": "Creating plan...",
+                "completed": "Plan created successfully",
+                "completed_default": "Default plan created",
+            }.get(status, status)
+
+            await task_manager.update_task_step(
+                task_id,
+                0,
+                f"Plan {data['plan_id']}: {status_text}",
+                "plan"
+            )
+
+        async def on_plan_update(data):
+            await task_manager.update_task_step(
+                task_id,
+                0,
+                f"Plan step {data['step_index']} status changed to: {data['status']}",
+                "plan"
+            )
+
+        # Register all event handlers
+        agent.register_event_handler("thinking", on_thinking)
+        agent.register_event_handler("tool_select", on_tool_select)
+        agent.register_event_handler("tool_execute", on_tool_execute)
+        agent.register_event_handler("tool_result", on_tool_result)
+        agent.register_event_handler("state_change", on_state_change)
+        agent.register_event_handler("error", on_error)
+        agent.register_event_handler("step_complete", on_step_complete)
+        agent.register_event_handler("task_complete", on_task_complete)
+        agent.register_event_handler("browser_state", on_browser_state)
+        agent.register_event_handler("manus_context", on_manus_context)
+        agent.register_event_handler("plan_status", on_plan_status)
+        agent.register_event_handler("plan_step", on_plan_step)
+        agent.register_event_handler("plan_step_completed", on_plan_step_completed)
+        agent.register_event_handler("mcp_connected", on_mcp_connected)
+        agent.register_event_handler("mcp_disconnected", on_mcp_disconnected)
+        agent.register_event_handler("mcp_tools_changed", on_mcp_tools_changed)
+
+        # 注册流程事件处理器 (如果是使用flow的情况)
+        if hasattr(agent, "register_flow_handlers"):
+            agent.register_flow_handlers({
+                "flow_start": on_flow_start,
+                "flow_step": on_flow_step,
+                "flow_agent_switch": on_flow_agent_switch,
+                "flow_complete": on_flow_complete,
+                "flow_error": on_flow_error,
+                "plan_create": on_plan_create,
+                "plan_update": on_plan_update,
+                "plan_step_start": on_plan_step,
+                "plan_step_complete": on_plan_step_completed,
+            })
+
+        # Keep a basic log handler for console output
         from app.logger import logger
 
+        # We still keep the log handler for backward compatibility and debugging
         class SSELogHandler:
             def __init__(self, task_id):
                 self.task_id = task_id
@@ -172,20 +375,9 @@ async def run_task(task_id: str, prompt: str):
                 # Extract - Subsequent Content
                 cleaned_message = re.sub(r"^.*? - ", "", message)
 
-                event_type = "log"
-                if "✨ Manus's thoughts:" in cleaned_message:
-                    event_type = "think"
-                elif "🛠️ Manus selected" in cleaned_message:
-                    event_type = "tool"
-                elif "🎯 Tool" in cleaned_message:
-                    event_type = "act"
-                elif "📝 Oops!" in cleaned_message:
-                    event_type = "error"
-                elif "🏁 Special tool" in cleaned_message:
-                    event_type = "complete"
-
+                # Simple log entries (these are now secondary to the event system)
                 await task_manager.update_task_step(
-                    self.task_id, 0, cleaned_message, event_type
+                    self.task_id, 0, cleaned_message, "log"
                 )
 
         sse_handler = SSELogHandler(task_id)
@@ -193,7 +385,6 @@ async def run_task(task_id: str, prompt: str):
 
         result = await agent.run(prompt)
         await task_manager.update_task_step(task_id, 1, result, "result")
-        await task_manager.complete_task(task_id)
     except Exception as e:
         await task_manager.fail_task(task_id, str(e))
 
@@ -229,7 +420,11 @@ async def task_events(task_id: str):
                     if task:
                         yield f"event: status\ndata: {dumps({'type': 'status', 'status': task.status, 'steps': task.steps})}\n\n"
                     yield f"event: {event['type']}\ndata: {formatted_event}\n\n"
-                elif event["type"] in ["think", "tool", "act", "run"]:
+                # 支持所有可能的事件类型
+                elif event["type"] in [
+                    "think", "tool", "act", "run", "browser", "context", "log",
+                    "plan", "plan_step", "mcp", "flow", "flow_step"
+                ]:
                     yield f"event: {event['type']}\ndata: {formatted_event}\n\n"
                 else:
                     yield f"event: {event['type']}\ndata: {formatted_event}\n\n"

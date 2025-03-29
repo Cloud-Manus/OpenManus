@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -42,6 +42,40 @@ class BaseAgent(BaseModel, ABC):
 
     duplicate_threshold: int = 2
 
+    # Event system
+    event_callbacks: Dict[str, List[Callable]] = Field(
+        default_factory=lambda: {
+            # 基础事件
+            "thinking": [],
+            "tool_select": [],
+            "tool_execute": [],
+            "tool_result": [],
+            "step_start": [],
+            "step_complete": [],
+            "task_start": [],
+            "task_complete": [],
+            "state_change": [],
+            "error": [],
+            "stuck_state": [],
+
+            # 浏览器和Manus事件
+            "browser_state": [],
+            "manus_context": [],
+
+            # 计划相关事件
+            "plan_status": [],
+            "plan_step": [],
+            "plan_step_completed": [],
+
+            # MCP相关事件
+            "mcp_connected": [],
+            "mcp_disconnected": [],
+            "mcp_tools_changed": [],
+        },
+        description="Event callbacks registry",
+        exclude=True,
+    )
+
     class Config:
         arbitrary_types_allowed = True
         extra = "allow"  # Allow extra fields for flexibility in subclasses
@@ -54,6 +88,32 @@ class BaseAgent(BaseModel, ABC):
         if not isinstance(self.memory, Memory):
             self.memory = Memory()
         return self
+
+    def register_event_handler(self, event_type: str, callback: Callable) -> None:
+        """Register a callback function for a specific event type.
+
+        Args:
+            event_type: Type of event to register for (thinking, tool_select, tool_execute,
+                       step_complete, task_complete, error)
+            callback: Async function to call when event occurs
+        """
+        if event_type not in self.event_callbacks:
+            self.event_callbacks[event_type] = []
+        self.event_callbacks[event_type].append(callback)
+
+    async def emit_event(self, event_type: str, data: Any) -> None:
+        """Emit an event to all registered handlers for that event type.
+
+        Args:
+            event_type: Type of event to emit
+            data: Event data to pass to handlers
+        """
+        if event_type in self.event_callbacks:
+            for callback in self.event_callbacks[event_type]:
+                try:
+                    await callback(data)
+                except Exception as e:
+                    logger.error(f"Error in event handler for {event_type}: {str(e)}")
 
     @asynccontextmanager
     async def state_context(self, new_state: AgentState):
@@ -73,13 +133,16 @@ class BaseAgent(BaseModel, ABC):
 
         previous_state = self.state
         self.state = new_state
+        await self.emit_event("state_change", {"from": previous_state, "to": new_state})
         try:
             yield
         except Exception as e:
             self.state = AgentState.ERROR  # Transition to ERROR on failure
+            await self.emit_event("error", {"error": str(e), "state": "ERROR"})
             raise e
         finally:
             self.state = previous_state  # Revert to previous state
+            await self.emit_event("state_change", {"from": new_state, "to": previous_state})
 
     def update_memory(
         self,
@@ -130,6 +193,7 @@ class BaseAgent(BaseModel, ABC):
 
         if request:
             self.update_memory("user", request)
+            await self.emit_event("task_start", {"request": request})
 
         results: List[str] = []
         async with self.state_context(AgentState.RUNNING):
@@ -138,11 +202,19 @@ class BaseAgent(BaseModel, ABC):
             ):
                 self.current_step += 1
                 logger.info(f"Executing step {self.current_step}/{self.max_steps}")
+                await self.emit_event("step_start", {"step": self.current_step, "max_steps": self.max_steps})
+
                 step_result = await self.step()
+                await self.emit_event("step_complete", {
+                    "step": self.current_step,
+                    "result": step_result,
+                    "max_steps": self.max_steps
+                })
 
                 # Check for stuck state
                 if self.is_stuck():
                     self.handle_stuck_state()
+                    await self.emit_event("stuck_state", {"step": self.current_step})
 
                 results.append(f"Step {self.current_step}: {step_result}")
 
@@ -150,6 +222,10 @@ class BaseAgent(BaseModel, ABC):
                 self.current_step = 0
                 self.state = AgentState.IDLE
                 results.append(f"Terminated: Reached max steps ({self.max_steps})")
+                await self.emit_event("max_steps_reached", {"max_steps": self.max_steps})
+
+            await self.emit_event("task_complete", {"results": results})
+
         await SANDBOX_CLIENT.cleanup()
         return "\n".join(results) if results else "No steps executed"
 

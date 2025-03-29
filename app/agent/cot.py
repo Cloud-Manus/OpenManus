@@ -26,6 +26,8 @@ class CoTAgent(BaseAgent):
         """Execute one step of chain of thought reasoning"""
         logger.info(f"🧠 {self.name} is thinking...")
 
+        await self.emit_event("step_start", {"step": self.current_step, "max_steps": self.max_steps})
+
         # If next_step_prompt exists and this isn't the first message, add it to user messages
         if self.next_step_prompt and len(self.messages) > 1:
             self.memory.add_message(Message.user_message(self.next_step_prompt))
@@ -38,10 +40,19 @@ class CoTAgent(BaseAgent):
             else None,
         )
 
+        # Emit thinking event
+        await self.emit_event("thinking", {
+            "content": response,
+            "step": self.current_step
+        })
+
         # Record assistant's response
         self.memory.add_message(Message.assistant_message(response))
 
         # Set state to finished after completion
         self.state = AgentState.FINISHED
+
+        # Emit completion event
+        await self.emit_event("task_complete", {"results": [response]})
 
         return response
