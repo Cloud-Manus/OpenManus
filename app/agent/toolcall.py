@@ -53,6 +53,7 @@ class ToolCallAgent(ReActAgent):
                 tools=self.available_tools.to_params(),
                 tool_choice=self.tool_choices,
             )
+            await self.event_manager.think(response)
         except ValueError:
             raise
         except Exception as e:
@@ -81,6 +82,7 @@ class ToolCallAgent(ReActAgent):
         logger.info(
             f"🛠️ {self.name} selected {len(tool_calls) if tool_calls else 0} tools to use"
         )
+        await self.event_manager.think(response)
         if tool_calls:
             logger.info(
                 f"🧰 Tools being prepared: {[call.function.name for call in tool_calls]}"
@@ -140,12 +142,10 @@ class ToolCallAgent(ReActAgent):
         for command in self.tool_calls:
             # Reset base64_image for each tool call
             self._current_base64_image = None
-
             result = await self.execute_tool(command)
-
             if self.max_observe:
                 result = result[: self.max_observe]
-
+            await self.event_manager.tool_used(command.function.name, command.function.arguments, result)
             logger.info(
                 f"🎯 Tool '{command.function.name}' completed its mission! Result: {result}"
             )
@@ -178,7 +178,9 @@ class ToolCallAgent(ReActAgent):
             # Execute the tool
             logger.info(f"🔧 Activating tool: '{name}'...")
             result = await self.available_tools.execute(name=name, tool_input=args)
-
+            await self.event_manager.tool_result(
+                tool_name=name, args=args, result=result, success=True
+            )
             # Handle special tools
             await self._handle_special_tool(name=name, result=result)
 

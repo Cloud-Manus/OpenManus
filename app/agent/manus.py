@@ -53,10 +53,8 @@ class Manus(BrowserAgent):
         if browser_in_use:
             # Override with browser-specific prompt temporarily to get browser context
             self.next_step_prompt = BROWSER_NEXT_STEP_PROMPT
-
         # Call parent's think method
         result = await super().think()
-
         # Restore original prompt
         self.next_step_prompt = original_prompt
 

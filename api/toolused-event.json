@@ -1,0 +1,21 @@
+{
+    "id": "evt_d5e6f7g8",
+    "type": "toolUsed",
+    "timestamp": 1741055637800,
+    "actionId": "action_a7b8c9d0",
+    "tool": "browser",
+    "status": "success",
+    "brief": "Manus 正在使用浏览器",
+    "description": "正在搜索自动化测试最佳实践",
+    "message": {
+        "action": "搜索",
+        "param": "自动化测试最佳实践"
+    },
+    "detail": {
+        "browser": {
+            "url": "https://example.com/search?q=automation+testing+best+practices",
+            "screenshot": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+        }
+    },
+    "planStepId": "step_002"
+}

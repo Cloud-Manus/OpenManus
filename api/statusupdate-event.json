@@ -1,0 +1,10 @@
+{
+    "id": "evt_c4d5e6f7",
+    "type": "statusUpdate",
+    "timestamp": 1741055635890,
+    "agentStatus": "running",
+    "brief": "Manus 正在工作",
+    "description": "正在分析您的需求并设计测试方案",
+    "noRender": false,
+    "planStepId": "step_001"
+}

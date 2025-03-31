@@ -1,0 +1,14 @@
+event: statusUpdate
+data: {"id":"evt_c4d5e6f7","type":"statusUpdate","timestamp":1741055635890,"agentStatus":"running","brief":"Manus 正在工作","description":"正在分析您的需求并设计测试方案","noRender":false,"planStepId":"step_001"}
+
+event: liveStatus
+data: {"id":"evt_b3c4d5e6","type":"liveStatus","timestamp":1741055634980,"text":"思考中"}
+
+event: step
+data: {"id":"evt_e6f7g8h9","type":"step","timestamp":1741055639710,"step":1,"content":"根据需求分析，我们需要设计一个包含三层测试策略的自动化测试方案：单元测试、集成测试和端到端测试。"}
+
+event: think
+data: {"id":"evt_f7g8h9i0","type":"think","timestamp":1741055641620,"step":2,"content":"对于单元测试，我们需要考虑使用Jest框架来测试各个组件的独立功能。集成测试可以使用Cypress测试组件之间的交互，而端到端测试则需要模拟真实用户行为。"}
+
+event: complete
+data: {"id":"evt_j1k2l3m4","type":"complete","timestamp":1741055650260,"steps":[{"step":1,"result":"根据需求分析，我们需要设计一个包含三层测试策略的自动化测试方案：单元测试、集成测试和端到端测试。","type":"step"},{"step":2,"result":"对于单元测试，我们需要考虑使用Jest框架来测试各个组件的独立功能。集成测试可以使用Cypress测试组件之间的交互，而端到端测试则需要模拟真实用户行为。","type":"think"},{"step":3,"result":"根据搜索结果，Jest是目前最流行的JavaScript测试框架，适合单元测试和组件测试。它提供了丰富的断言函数和模拟功能。","type":"tool"},{"step":4,"result":"基于收集的信息，我开始设计测试策略文档，包括测试范围、测试环境和测试工具选择。","type":"act"},{"step":5,"result":"测试策略文档已完成，包括三个测试层次的详细实施方案和工具选择建议。接下来将设计具体的测试用例。","type":"result"}],"message":"自动化测试方案设计已完成，包括测试策略文档和工具选择建议。"}

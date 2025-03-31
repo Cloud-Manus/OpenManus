@@ -1,0 +1,1063 @@
+{
+    "openapi": "3.0.1",
+    "info": {
+        "title": "manus-api",
+        "description": "",
+        "version": "1.0.0"
+    },
+    "tags": [
+        {
+            "name": "tasks"
+        },
+        {
+            "name": "events"
+        }
+    ],
+    "paths": {
+        "/tasks": {
+            "post": {
+                "summary": "创建新任务",
+                "deprecated": false,
+                "description": "",
+                "operationId": "createTask",
+                "tags": [],
+                "parameters": [],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateTaskRequest"
+                            },
+                            "example": ""
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TaskResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "400": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    }
+                },
+                "security": []
+            },
+            "get": {
+                "summary": "获取任务列表",
+                "deprecated": false,
+                "description": "",
+                "operationId": "listTasks",
+                "tags": [],
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 20
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "按状态筛选",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "pending",
+                                "running",
+                                "completed",
+                                "failed",
+                                "terminated"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TaskListResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    }
+                },
+                "security": []
+            }
+        },
+        "/tasks/{task_id}": {
+            "get": {
+                "summary": "获取任务详情",
+                "deprecated": false,
+                "description": "",
+                "tags": [
+                    "tasks"
+                ],
+                "parameters": [
+                    {
+                        "name": "task_id",
+                        "in": "path",
+                        "description": "任务ID",
+                        "required": true,
+                        "example": "",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        },
+                        "headers": {}
+                    }
+                },
+                "security": []
+            }
+        },
+        "/tasks/{task_id}/terminate": {
+            "post": {
+                "summary": "终止任务",
+                "deprecated": false,
+                "description": "",
+                "tags": [
+                    "tasks"
+                ],
+                "parameters": [
+                    {
+                        "name": "task_id",
+                        "in": "path",
+                        "description": "任务ID",
+                        "required": true,
+                        "example": "",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {}
+                            },
+                            "example": ""
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        },
+                        "headers": {}
+                    }
+                },
+                "security": []
+            }
+        },
+        "/tasks/{task_id}/events": {
+            "get": {
+                "summary": "订阅任务事件流 (SSE)",
+                "deprecated": false,
+                "description": "",
+                "tags": [
+                    "events"
+                ],
+                "parameters": [
+                    {
+                        "name": "task_id",
+                        "in": "path",
+                        "description": "任务ID",
+                        "required": true,
+                        "example": "",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "text/event-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary",
+                                    "description": "事件流，包含各种类型的事件"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        },
+                        "headers": {}
+                    }
+                },
+                "security": []
+            }
+        },
+        "/tasks/{taskId}": {
+            "get": {
+                "summary": "获取任务详情",
+                "deprecated": false,
+                "description": "",
+                "operationId": "getTask",
+                "tags": [],
+                "parameters": [
+                    {
+                        "name": "taskId",
+                        "in": "path",
+                        "description": "",
+                        "required": true,
+                        "example": "",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TaskResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    }
+                },
+                "security": []
+            },
+            "delete": {
+                "summary": "删除任务",
+                "deprecated": false,
+                "description": "",
+                "operationId": "deleteTask",
+                "tags": [],
+                "parameters": [
+                    {
+                        "name": "taskId",
+                        "in": "path",
+                        "description": "",
+                        "required": true,
+                        "example": "",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {}
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    }
+                },
+                "security": []
+            }
+        },
+        "/tasks/{taskId}/events": {
+            "get": {
+                "summary": "获取任务事件流(SSE)",
+                "deprecated": false,
+                "description": "",
+                "operationId": "streamTaskEvents",
+                "tags": [],
+                "parameters": [
+                    {
+                        "name": "taskId",
+                        "in": "path",
+                        "description": "",
+                        "required": true,
+                        "example": "",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "replay",
+                        "in": "query",
+                        "description": "是否重放所有事件",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "text/event-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    }
+                },
+                "security": []
+            }
+        },
+        "/tasks/{taskId}/terminate": {
+            "post": {
+                "summary": "终止任务",
+                "deprecated": false,
+                "description": "",
+                "operationId": "terminateTask",
+                "tags": [],
+                "parameters": [
+                    {
+                        "name": "taskId",
+                        "in": "path",
+                        "description": "",
+                        "required": true,
+                        "example": "",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TerminateTaskRequest"
+                            },
+                            "example": ""
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TaskResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "headers": {}
+                    }
+                },
+                "security": []
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "BadRequest": {
+                "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "NotFound": {
+                "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "ServerError": {
+                "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "ToolResult": {
+                "type": "object",
+                "properties": {
+                    "output": {
+                        "type": "string"
+                    },
+                    "error": {
+                        "type": "string"
+                    },
+                    "base64_image": {
+                        "type": "string"
+                    },
+                    "system": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "output"
+                ]
+            },
+            "CreateTaskRequest": {
+                "type": "object",
+                "required": [
+                    "prompt"
+                ],
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "任务提示词",
+                        "examples": [
+                            "设计一个自动化测试方案"
+                        ]
+                    },
+                    "options": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "任务选项",
+                        "properties": {}
+                    }
+                }
+            },
+            "TerminateTaskRequest": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "终止原因"
+                    }
+                }
+            },
+            "TaskResponse": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "prompt",
+                    "status",
+                    "created_at"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "任务ID"
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "任务提示词"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "pending",
+                            "running",
+                            "completed",
+                            "failed",
+                            "terminated"
+                        ],
+                        "description": "任务状态"
+                    },
+                    "created_at": {
+                        "type": "integer",
+                        "description": "创建时间戳(毫秒)"
+                    },
+                    "updated_at": {
+                        "type": "integer",
+                        "description": "更新时间戳(毫秒)"
+                    },
+                    "completed_at": {
+                        "type": "integer",
+                        "description": "完成时间戳(毫秒)"
+                    }
+                }
+            },
+            "TaskListResponse": {
+                "type": "object",
+                "required": [
+                    "tasks",
+                    "meta"
+                ],
+                "properties": {
+                    "tasks": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TaskResponse"
+                        }
+                    },
+                    "meta": {
+                        "type": "object",
+                        "properties": {
+                            "total": {
+                                "type": "integer"
+                            },
+                            "page": {
+                                "type": "integer"
+                            },
+                            "per_page": {
+                                "type": "integer"
+                            },
+                            "pages": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            },
+            "Event": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "type",
+                    "timestamp",
+                    "toolSelected",
+                    "error"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "事件唯一标识符"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "事件类型",
+                        "enum": [
+                            "chat",
+                            "liveStatus",
+                            "statusUpdate",
+                            "toolUsed",
+                            "step",
+                            "think",
+                            "tool",
+                            "act",
+                            "result",
+                            "complete"
+                        ]
+                    },
+                    "timestamp": {
+                        "type": "integer",
+                        "description": "时间戳(毫秒)"
+                    },
+                    "sender": {
+                        "type": "string",
+                        "enum": [
+                            "user",
+                            "assistant"
+                        ],
+                        "description": "消息发送者"
+                    },
+                    "messageType": {
+                        "type": "string",
+                        "description": "消息类型 for chat",
+                        "enum": [
+                            "text"
+                        ],
+                        "deprecated": true
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "消息内容或步骤结果（全部都在）"
+                    },
+                    "attachments": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {}
+                        },
+                        "description": "附件列表 optional",
+                        "deprecated": true
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "状态文本 igonre",
+                        "deprecated": true
+                    },
+                    "agentStatus": {
+                        "type": "string",
+                        "enum": [
+                            "running",
+                            "stopped",
+                            "error",
+                            "terminated"
+                        ],
+                        "description": "代理状态 （task 的健康检查）"
+                    },
+                    "noRender": {
+                        "type": "boolean",
+                        "description": "是否不渲染",
+                        "deprecated": true
+                    },
+                    "planStepId": {
+                        "type": "string",
+                        "description": "计划步骤ID optional",
+                        "deprecated": true
+                    },
+                    "actionId": {
+                        "type": "string",
+                        "description": "动作ID optional ",
+                        "deprecated": true
+                    },
+                    "tool": {
+                        "type": "string",
+                        "description": "工具名称"
+                    },
+                    "toolSelected": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "for type=tool_select event"
+                    },
+                    "toolStatus": {
+                        "type": "string",
+                        "description": "工具使用状态",
+                        "enum": [
+                            "executing",
+                            "success",
+                            "fail"
+                        ]
+                    },
+                    "message": {
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "string",
+                                "description": "？ 参数的使用 验证"
+                            },
+                            "param": {
+                                "type": "string"
+                            }
+                        },
+                        "description": "工具使用消息",
+                        "deprecated": true
+                    },
+                    "toolDetail": {
+                        "type": "object",
+                        "properties": {
+                            "strReplaceEditor": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {
+                                    "command": {
+                                        "type": "string"
+                                    },
+                                    "path": {
+                                        "type": "string"
+                                    },
+                                    "view_range": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "file_text": {
+                                        "type": "string",
+                                        "description": "for create"
+                                    },
+                                    "old_str": {
+                                        "type": "string"
+                                    },
+                                    "new_str": {
+                                        "type": "string"
+                                    },
+                                    "insert_line": {
+                                        "type": "string"
+                                    },
+                                    "result": {
+                                        "$ref": "#/components/schemas/ToolResult"
+                                    }
+                                },
+                                "required": [
+                                    "command",
+                                    "path",
+                                    "result"
+                                ]
+                            },
+                            "bash": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {
+                                    "command": {
+                                        "type": "string"
+                                    },
+                                    "result": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "result",
+                                    "command"
+                                ]
+                            },
+                            "browserUse": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {}
+                            },
+                            "terminate": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "success",
+                                            "failure"
+                                        ]
+                                    },
+                                    "result": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "status",
+                                    "result"
+                                ]
+                            },
+                            "createChatCompletion": {
+                                "type": "object",
+                                "properties": {
+                                    "response": {
+                                        "type": "string"
+                                    },
+                                    "result": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "result"
+                                ]
+                            },
+                            "planning": {
+                                "type": "object",
+                                "properties": {
+                                    "command": {
+                                        "type": "string"
+                                    },
+                                    "plan_id": {
+                                        "type": "string"
+                                    },
+                                    "title": {
+                                        "type": "string"
+                                    },
+                                    "steps": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "step_index": {
+                                        "type": "string"
+                                    },
+                                    "step_status": {
+                                        "type": "string"
+                                    },
+                                    "step_notes": {
+                                        "type": "string"
+                                    },
+                                    "result": {
+                                        "$ref": "#/components/schemas/ToolResult"
+                                    }
+                                },
+                                "required": [
+                                    "command",
+                                    "result"
+                                ]
+                            }
+                        },
+                        "description": "？ 工具结果详情 验证",
+                        "required": [
+                            "createChatCompletion",
+                            "planning"
+                        ]
+                    },
+                    "step": {
+                        "type": "integer",
+                        "description": "步骤序号（main.py 20 step 验证 plan）"
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "step": {
+                                    "type": "integer"
+                                },
+                                "result": {
+                                    "type": "string"
+                                },
+                                "type": {
+                                    "type": "string"
+                                }
+                            },
+                            "description": "任务规划返回的结果 ？ "
+                        },
+                        "description": "任务步骤列表 "
+                    },
+                    "error": {
+                        "type": "string",
+                        "description": "for type=error event"
+                    }
+                }
+            },
+            "ErrorResponse": {
+                "type": "object",
+                "required": [
+                    "error",
+                    "message",
+                    "timestamp"
+                ],
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "description": "错误代码"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "错误消息"
+                    },
+                    "details": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "field": {
+                                    "type": "string"
+                                },
+                                "message": {
+                                    "type": "string"
+                                },
+                                "code": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "description": "详细错误信息"
+                    },
+                    "timestamp": {
+                        "type": "integer",
+                        "description": "时间戳(毫秒)"
+                    }
+                }
+            }
+        },
+        "securitySchemes": {}
+    },
+    "servers": [],
+    "security": []
+}

@@ -1,3 +1,6 @@
+import uuid
+import time
+
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from typing import List, Optional
@@ -8,7 +11,7 @@ from app.llm import LLM
 from app.logger import logger
 from app.sandbox.client import SANDBOX_CLIENT
 from app.schema import ROLE_TYPE, AgentState, Memory, Message
-
+from app.event import EventManager
 
 class BaseAgent(BaseModel, ABC):
     """Abstract base class for managing agent state and execution.
@@ -41,6 +44,9 @@ class BaseAgent(BaseModel, ABC):
     current_step: int = Field(default=0, description="Current step in execution")
 
     duplicate_threshold: int = 2
+
+    # event_manager: for event tracking
+    event_manager: EventManager = Field(default_factory=EventManager, description="Event manager for tracking")
 
     class Config:
         arbitrary_types_allowed = True
@@ -139,7 +145,6 @@ class BaseAgent(BaseModel, ABC):
                 self.current_step += 1
                 logger.info(f"Executing step {self.current_step}/{self.max_steps}")
                 step_result = await self.step()
-
                 # Check for stuck state
                 if self.is_stuck():
                     self.handle_stuck_state()
@@ -194,3 +199,11 @@ class BaseAgent(BaseModel, ABC):
     def messages(self, value: List[Message]):
         """Set the list of messages in the agent's memory."""
         self.memory.messages = value
+
+    def get_task_id(self) -> str:
+        """Get the task id for the agent."""
+        return self.task_id
+
+    def get_event_manager(self) -> EventManager:
+        """Get the event manager"""
+        return self.event_manager

@@ -23,10 +23,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
 
 class Task(BaseModel):
     id: str
@@ -98,20 +100,27 @@ class TaskManager:
                 {"type": "status", "status": task.status, "steps": task.steps}
             )
 
-    async def complete_task(self, task_id: str):
+    async def complete_task(self, task_id: str, result: str):
         if task_id in self.tasks:
             task = self.tasks[task_id]
             task.status = "completed"
             await self.queues[task_id].put(
                 {"type": "status", "status": task.status, "steps": task.steps}
             )
-            await self.queues[task_id].put({"type": "complete"})
+            await self.queues[task_id].put({"type": "complete", "result": result})
 
     async def fail_task(self, task_id: str, error: str):
         if task_id in self.tasks:
             self.tasks[task_id].status = f"failed: {error}"
             await self.queues[task_id].put({"type": "error", "message": error})
 
+    async def terminate_all_tasks(self):
+        for task_id in self.running_tasks:
+            await self.terminate_task(task_id)
+
+    async def close_all_queues(self):
+        for queue in self.queues.values():
+            queue.close()
 
 task_manager = TaskManager()
 
@@ -137,64 +146,24 @@ from app.agent.manus import Manus
 
 async def run_task(task_id: str, prompt: str):
     try:
+        # update task status
         task_manager.tasks[task_id].status = "running"
 
+        # create agent
         agent = Manus(
             name="Manus",
             description="A versatile agent that can solve various tasks using multiple tools",
         )
 
-        async def on_think(thought):
-            await task_manager.update_task_step(task_id, 0, thought, "think")
-
-        async def on_tool_execute(tool, input):
-            await task_manager.update_task_step(
-                task_id, 0, f"Executing tool: {tool}\nInput: {input}", "tool"
-            )
-
-        async def on_action(action):
-            await task_manager.update_task_step(
-                task_id, 0, f"Executing action: {action}", "act"
-            )
-
-        async def on_run(step, result):
-            await task_manager.update_task_step(task_id, step, result, "run")
-
-        from app.logger import logger
-
-        class SSELogHandler:
-            def __init__(self, task_id):
-                self.task_id = task_id
-
-            async def __call__(self, message):
-                import re
-
-                # Extract - Subsequent Content
-                cleaned_message = re.sub(r"^.*? - ", "", message)
-
-                event_type = "log"
-                if "✨ Manus's thoughts:" in cleaned_message:
-                    event_type = "think"
-                elif "🛠️ Manus selected" in cleaned_message:
-                    event_type = "tool"
-                elif "🎯 Tool" in cleaned_message:
-                    event_type = "act"
-                elif "📝 Oops!" in cleaned_message:
-                    event_type = "error"
-                elif "🏁 Special tool" in cleaned_message:
-                    event_type = "complete"
-
-                await task_manager.update_task_step(
-                    self.task_id, 0, cleaned_message, event_type
-                )
-
-        sse_handler = SSELogHandler(task_id)
-        logger.add(sse_handler)
-
+        # create event queue and connect to agent event manager
+        queue = task_manager.queues[task_id]
+        await agent.get_event_manager().connect_client(queue)
+        # run agent
         result = await agent.run(prompt)
-        await task_manager.update_task_step(task_id, 1, result, "result")
-        await task_manager.complete_task(task_id)
+        # complete task
+        await task_manager.complete_task(task_id, result)
     except Exception as e:
+        print(f"task execution error: {str(e)}")
         await task_manager.fail_task(task_id, str(e))
 
 
@@ -207,38 +176,45 @@ async def task_events(task_id: str):
 
         queue = task_manager.queues[task_id]
 
+        # send initial task status
         task = task_manager.tasks.get(task_id)
         if task:
             yield f"event: status\ndata: {dumps({'type': 'status', 'status': task.status, 'steps': task.steps})}\n\n"
 
         while True:
             try:
+                # get event
                 event = await queue.get()
-                formatted_event = dumps(event)
 
+                # serialize event to json
+                if isinstance(event, dict):
+                    # if event is from task manager
+                    event_type = event.get("type", "unknown")
+                    formatted_event = dumps(event)
+                else:
+                    # if event is from event manager
+                    event_type = (
+                        event.type.value
+                        if hasattr(event.type, "value")
+                        else str(event.type)
+                    )
+                    formatted_event = event.model_dump_json()
+
+                # send heartbeat
                 yield ": heartbeat\n\n"
 
-                if event["type"] == "complete":
-                    yield f"event: complete\ndata: {formatted_event}\n\n"
+                # send event
+                yield f"event: {event_type}\ndata: {formatted_event}\n\n"
+
+                # check if event is complete
+                if event_type == "complete" or event_type == "COMPLETE":
                     break
-                elif event["type"] == "error":
-                    yield f"event: error\ndata: {formatted_event}\n\n"
-                    break
-                elif event["type"] == "step":
-                    task = task_manager.tasks.get(task_id)
-                    if task:
-                        yield f"event: status\ndata: {dumps({'type': 'status', 'status': task.status, 'steps': task.steps})}\n\n"
-                    yield f"event: {event['type']}\ndata: {formatted_event}\n\n"
-                elif event["type"] in ["think", "tool", "act", "run"]:
-                    yield f"event: {event['type']}\ndata: {formatted_event}\n\n"
-                else:
-                    yield f"event: {event['type']}\ndata: {formatted_event}\n\n"
 
             except asyncio.CancelledError:
-                print(f"Client disconnected for task {task_id}")
+                print(f"client disconnected: {task_id}")
                 break
             except Exception as e:
-                print(f"Error in event stream: {str(e)}")
+                print(f"event stream error: {str(e)}")
                 yield f"event: error\ndata: {dumps({'message': str(e)})}\n\n"
                 break
 
@@ -338,3 +314,6 @@ if __name__ == "__main__":
 
     # start the server.
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    async def shutdown():
+        await task_manager.terminate_all_tasks()
+        await task_manager.close_all_queues()
