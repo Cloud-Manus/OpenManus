@@ -210,7 +210,7 @@ class Step(BaseModel):
 class ToolResult(BaseModel):
     """tool result"""
 
-    output: str
+    output: Optional[str] = None
     base64_image: Optional[str] = None
     error: Optional[str] = None
     system: Optional[str] = None
@@ -229,12 +229,8 @@ class BrowserUseTool(BaseModel):
     goal: Optional[str] = None
     keys: Optional[str] = None
     seconds: Optional[int] = None
-    result: Optional[str] = None
+    result: Optional[ToolResult] = None
     status: Optional[str] = None
-    error: Optional[str] = None
-    output: Optional[str] = None
-    base64_image: Optional[str] = None
-    system: Optional[str] = None
     extra_data: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -468,10 +464,12 @@ class EventManager:
                     goal=args.get("goal"),
                     keys=args.get("keys"),
                     seconds=args.get("seconds"),
-                    output=result.output,
-                    status=result.error,
-                    base64_image=result.base64_image,
-                    system=result.system,
+                    result=ToolResult(
+                        output=result.output,
+                        base64_image=result.base64_image,
+                        error=result.error,
+                        system=result.system,
+                    ),
                 )
                 event = Event(
                     type=TypeEnum.TOOL_USED,

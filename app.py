@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.flow.flow_factory import FlowFactory, FlowType
+
 app = FastAPI()
 
 app.add_middleware(
@@ -154,7 +156,13 @@ async def run_task(task_id: str, prompt: str):
             name="Manus",
             description="A versatile agent that can solve various tasks using multiple tools",
         )
-
+        # agents = {
+        #     "manus": Manus(),
+        # }
+        # agent = FlowFactory.create_flow(
+        #     flow_type=FlowType.PLANNING,
+        #     agents=agents,
+        # )
         # create event queue and connect to agent event manager
         queue = task_manager.queues[task_id]
         await agent.get_event_manager().connect_client(queue)
