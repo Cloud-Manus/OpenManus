@@ -167,9 +167,10 @@ async def run_task(task_id: str, prompt: str):
         queue = task_manager.queues[task_id]
         await agent.get_event_manager().connect_client(queue)
         # run agent
-        result = await agent.run(prompt)
-        # complete task
-        await task_manager.complete_task(task_id, result)
+        await agent.run(prompt)
+        # result = await agent.run(prompt)
+        # # complete task
+        # await task_manager.complete_task(task_id, result)
     except Exception as e:
         print(f"task execution error: {str(e)}")
         await task_manager.fail_task(task_id, str(e))
@@ -185,10 +186,13 @@ async def task_events(task_id: str):
         queue = task_manager.queues[task_id]
 
         # send initial task status
-        task = task_manager.tasks.get(task_id)
-        if task:
-            yield f"event: status\ndata: {dumps({'type': 'status', 'status': task.status, 'steps': task.steps})}\n\n"
+        # task = task_manager.tasks.get(task_id)
+        # if task:
+        #     yield f"event: status\ndata: {dumps({'type': 'status', 'status': task.status, 'steps': task.steps})}\n\n"
 
+        # send heartbeat
+        yield ": heartbeat\n\n"
+        
         while True:
             try:
                 # get event
