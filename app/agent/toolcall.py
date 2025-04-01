@@ -145,7 +145,7 @@ class ToolCallAgent(ReActAgent):
             result = await self.execute_tool(command)
             if self.max_observe:
                 result = result[: self.max_observe]
-            await self.event_manager.tool_used(command.function.name, command.function.arguments, result)
+            # await self.event_manager.tool_used(command.function.name, command.function.arguments, result)
             logger.info(
                 f"🎯 Tool '{command.function.name}' completed its mission! Result: {result}"
             )

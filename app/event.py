@@ -383,6 +383,7 @@ class EventManager:
 
     async def tool_used(self, tool_name: str, args: Any, result: Any, success: bool = True) -> Event:
         """process tool used"""
+        print("debug {tool_name} ===============")
         if tool_name == "python_execute":
             python_execute = PythonExecute(
                 code=args.get("code", ""),
@@ -398,15 +399,6 @@ class EventManager:
             )
             await self.add_event(event)
             return event
-
-    async def tool_used(self, tool_name: str, args: Any, result: Any, success: bool = True) -> Event:
-        """process tool used"""
-        event = Event(
-            type=TypeEnum.TOOL_USED,
-            tool=tool_name,
-            tool_status=ToolStatus.SUCCESS if success else ToolStatus.FAIL,
-            content=str(result),
-        )
 
     async def think(self, result: Any) -> Event:
         """process think result"""

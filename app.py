@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import os
+import time
 import tomllib
 import uuid
 from datetime import datetime
@@ -124,6 +125,7 @@ class TaskManager:
         for queue in self.queues.values():
             queue.close()
 
+
 task_manager = TaskManager()
 
 
@@ -168,6 +170,7 @@ async def run_task(task_id: str, prompt: str):
         await agent.get_event_manager().connect_client(queue)
         # run agent
         await agent.run(prompt)
+        # await agent.execute(prompt)
         # result = await agent.run(prompt)
         # # complete task
         # await task_manager.complete_task(task_id, result)
@@ -180,53 +183,55 @@ async def run_task(task_id: str, prompt: str):
 async def task_events(task_id: str):
     async def event_generator():
         if task_id not in task_manager.queues:
-            yield f"event: error\ndata: {dumps({'message': 'Task not found'})}\n\n"
+            yield f"event: error\ndata: {dumps({'message': 'task {task_id} not found'})}\n\n"
             return
 
         queue = task_manager.queues[task_id]
+        heartbeat_interval = 15
+        last_heartbeat = time.time()
 
-        # send initial task status
-        # task = task_manager.tasks.get(task_id)
-        # if task:
-        #     yield f"event: status\ndata: {dumps({'type': 'status', 'status': task.status, 'steps': task.steps})}\n\n"
-
-        # send heartbeat
         yield ": heartbeat\n\n"
-        
+
         while True:
             try:
-                # get event
-                event = await queue.get()
+                current_time = time.time()
+                timeout = max(0.1, heartbeat_interval - (current_time - last_heartbeat))
 
-                # serialize event to json
-                if isinstance(event, dict):
-                    # if event is from task manager
-                    event_type = event.get("type", "unknown")
-                    formatted_event = dumps(event)
-                else:
-                    # if event is from event manager
-                    event_type = (
-                        event.type.value
-                        if hasattr(event.type, "value")
-                        else str(event.type)
-                    )
-                    formatted_event = event.model_dump_json()
+                try:
+                    # wait event check timeout heatbreat
+                    event = await asyncio.wait_for(queue.get(), timeout=timeout)
 
-                # send heartbeat
-                yield ": heartbeat\n\n"
+                    if isinstance(event, dict):
+                        event_type = event.get("type", "unknown")
+                        formatted_event = dumps(event)
+                    else:
+                        event_type = (
+                            event.type.value
+                            if hasattr(event.type, "value")
+                            else str(event.type)
+                        )
+                        formatted_event = event.model_dump_json()
 
-                # send event
-                yield f"event: {event_type}\ndata: {formatted_event}\n\n"
+                    # send event
+                    yield f"event: {event_type}\ndata: {formatted_event}\n\n"
 
-                # check if event is complete
-                if event_type == "complete" or event_type == "COMPLETE":
-                    break
+                    # check complete
+                    if event_type == "complete":
+                        break
+
+                except asyncio.TimeoutError:
+                    # timeout no resonse
+                    current_time = time.time()
+                    if current_time - last_heartbeat >= heartbeat_interval:
+                        yield ": heartbeat\n\n"
+                        last_heartbeat = current_time
+                    continue
 
             except asyncio.CancelledError:
-                print(f"client disconnected: {task_id}")
+                print(f"client : {task_id}")
                 break
             except Exception as e:
-                print(f"event stream error: {str(e)}")
+                print(f"event stram err: {str(e)}")
                 yield f"event: error\ndata: {dumps({'message': str(e)})}\n\n"
                 break
 
@@ -326,6 +331,7 @@ if __name__ == "__main__":
 
     # start the server.
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+
     async def shutdown():
         await task_manager.terminate_all_tasks()
         await task_manager.close_all_queues()

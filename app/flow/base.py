@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 
 from app.agent.base import BaseAgent
 
+from app.event import EventManager
 
 class BaseFlow(BaseModel, ABC):
     """Base class for execution flows supporting multiple agents"""
@@ -12,6 +13,10 @@ class BaseFlow(BaseModel, ABC):
     agents: Dict[str, BaseAgent]
     tools: Optional[List] = None
     primary_agent_key: Optional[str] = None
+    # event_manager: for event tracking
+    event_manager: EventManager = Field(
+        default_factory=EventManager, description="Event manager for tracking"
+    )
 
     class Config:
         arbitrary_types_allowed = True
@@ -55,3 +60,7 @@ class BaseFlow(BaseModel, ABC):
     @abstractmethod
     async def execute(self, input_text: str) -> str:
         """Execute the flow with given input"""
+
+    def get_event_manager(self) -> EventManager:
+        """Get the event manager"""
+        return self.event_manager
