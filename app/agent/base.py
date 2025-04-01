@@ -1,17 +1,17 @@
-import uuid
 import time
-
+import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.event import EventManager
 from app.llm import LLM
 from app.logger import logger
 from app.sandbox.client import SANDBOX_CLIENT
 from app.schema import ROLE_TYPE, AgentState, Memory, Message
-from app.event import EventManager
+
 
 class BaseAgent(BaseModel, ABC):
     """Abstract base class for managing agent state and execution.
@@ -46,7 +46,9 @@ class BaseAgent(BaseModel, ABC):
     duplicate_threshold: int = 2
 
     # event_manager: for event tracking
-    event_manager: EventManager = Field(default_factory=EventManager, description="Event manager for tracking")
+    event_manager: EventManager = Field(
+        default_factory=EventManager, description="Event manager for tracking"
+    )
 
     class Config:
         arbitrary_types_allowed = True

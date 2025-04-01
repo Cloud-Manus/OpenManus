@@ -175,7 +175,9 @@ class PlanningFlow(BaseFlow):
 
                     # Execute the tool via ToolCollection instead of directly
                     result = await self.planning_tool.execute(**args)
-
+                    # 通过事件管理器记录事件
+                    if hasattr(self, "event_manager") and self.event_manager:
+                        await self.event_manager.planning_result(args, result)
                     logger.info(f"Plan creation result: {str(result)}")
                     return
 
@@ -183,14 +185,16 @@ class PlanningFlow(BaseFlow):
         logger.warning("Creating default plan")
 
         # Create default plan using the ToolCollection
-        await self.planning_tool.execute(
-            **{
-                "command": "create",
-                "plan_id": self.active_plan_id,
-                "title": f"Plan for: {request[:50]}{'...' if len(request) > 50 else ''}",
-                "steps": ["Analyze request", "Execute task", "Verify results"],
-            }
-        )
+        args = {
+            "command": "create",
+            "plan_id": self.active_plan_id,
+            "title": f"Plan for: {request[:50]}{'...' if len(request) > 50 else ''}",
+            "steps": ["Analyze request", "Execute task", "Verify results"],
+        }
+        result = await self.planning_tool.execute(**args)
+        # 通过事件管理器记录事件
+        if hasattr(self, "event_manager") and self.event_manager:
+            await self.event_manager.planning_result(args, result)
 
     async def _get_current_step_info(self) -> tuple[Optional[int], Optional[dict]]:
         """
@@ -230,6 +234,7 @@ class PlanningFlow(BaseFlow):
 
                     # Mark current step as in_progress
                     try:
+                        print("DEBUG  ======== mark step", self.active_plan_id, i)
                         await self.planning_tool.execute(
                             command="mark_step",
                             plan_id=self.active_plan_id,
@@ -291,13 +296,19 @@ class PlanningFlow(BaseFlow):
             return
 
         try:
+            print("DEBUG  ======== mark step", self.active_plan_id, self.current_step_index)
             # Mark the step as completed
-            await self.planning_tool.execute(
-                command="mark_step",
-                plan_id=self.active_plan_id,
-                step_index=self.current_step_index,
-                step_status=PlanStepStatus.COMPLETED.value,
-            )
+            args = {
+                "command": "mark_step",
+                "plan_id": self.active_plan_id,
+                "step_index": self.current_step_index,
+                "step_status": PlanStepStatus.COMPLETED.value,
+            }
+            result = await self.planning_tool.execute(**args)
+            if hasattr(self, "event_manager") and self.event_manager:
+                print("DEBUG  ======== mark step", self.active_plan_id, self.current_step_index, result)
+                await self.event_manager.planning_result(args, result)
+
             logger.info(
                 f"Marked step {self.current_step_index} as completed in plan {self.active_plan_id}"
             )
@@ -319,9 +330,8 @@ class PlanningFlow(BaseFlow):
     async def _get_plan_text(self) -> str:
         """Get the current plan as formatted text."""
         try:
-            result = await self.planning_tool.execute(
-                command="get", plan_id=self.active_plan_id
-            )
+            args = {"command": "get", "plan_id": self.active_plan_id}
+            result = await self.planning_tool.execute(**args)
             return result.output if hasattr(result, "output") else str(result)
         except Exception as e:
             logger.error(f"Error getting plan: {e}")

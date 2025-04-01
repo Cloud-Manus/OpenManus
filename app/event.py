@@ -7,10 +7,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
 from pydantic import BaseModel, Field, field_serializer, model_validator
 
 from app.tool import base
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
+
 
 class AgentStatus(str, Enum):
     """agent status enum - use str inheritance for automatic serialization"""
@@ -190,6 +191,7 @@ class TypeEnum(str, Enum):
     THINK = "think"
     TOOL = "tool"
     TOOL_USED = "toolUsed"
+    PLAN_UPDATE = "planUpdate"
 
 
 class Message(BaseModel):
@@ -202,9 +204,9 @@ class Message(BaseModel):
 class Step(BaseModel):
     """task planning return result"""
 
-    result: Optional[str] = None
-    step: Optional[int] = None
-    type: Optional[str] = None
+    id: Optional[str] = None
+    title: Optional[str] = None
+    status: Optional[str] = None
 
 
 class ToolResult(BaseModel):
@@ -281,18 +283,21 @@ class Planning(BaseModel):
     command: str
     result: ToolResult
     plan_id: Optional[str] = None
-    step_index: Optional[str] = None
+    step_index: Optional[int] = None
     step_notes: Optional[str] = None
     step_status: Optional[str] = None
     steps: Optional[List[str]] = None
     title: Optional[str] = None
 
+class PythonExecResul(BaseModel):
+    output: Optional[str] = None
+    success: Optional[bool] = None
 
 class PythonExecute(BaseModel):
     """python execute detail"""
 
     code: Optional[str] = None
-    result: Optional[str] = None
+    result: Optional[PythonExecResul] = None
 
 
 class ToolDetail(BaseModel):
@@ -381,13 +386,79 @@ class EventManager:
         """disconnect client connection"""
         self.clients.discard(queue)
 
-    async def tool_used(self, tool_name: str, args: Any, result: Any, success: bool = True) -> Event:
+    async def planning_result(
+        self,
+        args: Any,
+        result: Any,
+    ) -> Event:
+        """process planning result from tool"""
+        print(f"Debug planning_result args: {args}, result: {result}")
+        print("---------")
+
+        # progress steps
+        steps_list = args.get("steps")
+        steps = None
+        if steps_list and isinstance(steps_list, list):
+            steps = [
+                Step(id=str(i), title=step, status="not_started")
+                for i, step in enumerate(steps_list)
+            ]
+
+            # if command is mark_step, update specific step status
+            if (
+                args.get("command") == "mark_step"
+                and args.get("step_index") is not None
+            ):
+                step_index = int(args.get("step_index"))
+                if 0 <= step_index < len(steps):
+                    steps[step_index].status = args.get("step_status", "not_started")
+
+        # get command type and plan id
+        command = args.get("command", "")
+        plan_id = args.get("plan_id", "")
+        title = args.get("title", "")
+
+        # create and send event
+        event = Event(
+            type=TypeEnum.PLAN_UPDATE,
+            plan_step_id=plan_id,
+            steps=steps,
+            tool="planning",
+            tool_detail=ToolDetail(
+                planning=Planning(
+                    command=command,
+                    plan_id=plan_id,
+                    title=title,
+                    step_index=args.get("step_index"),
+                    step_notes=args.get("step_notes"),
+                    step_status=args.get("step_status"),
+                    steps=steps_list,
+                    result=ToolResult(
+                        output=(
+                            result.output if hasattr(result, "output") else str(result)
+                        ),
+                        base64_image=getattr(result, "base64_image", None),
+                        error=getattr(result, "error", None),
+                        system=getattr(result, "system", None),
+                    ),
+                )
+            ),
+        )
+        await self.add_event(event)
+        return event
+
+    async def tool_used(
+        self, tool_name: str, args: Any, result: Any, success: bool = True
+    ) -> Event:
         """process tool used"""
         print("debug {tool_name} ===============")
         if tool_name == "python_execute":
             python_execute = PythonExecute(
                 code=args.get("code", ""),
-                result=result,
+                result=PythonExecResul(
+                    output=(result.output if hasattr(result, "output") else str(result)),
+                    success=success,
+                ),
             )
             event = Event(
                 type=TypeEnum.TOOL_USED,
@@ -417,7 +488,12 @@ class EventManager:
             return event
 
     async def tool_result(
-        self, tool_name: str, args: Any, result: Any, success: bool = True
+        self,
+        tool_name: str,
+        args: Any,
+        result: Any,
+        success: bool = True,
+        plan_id: str = "",
     ) -> Event:
         """process tool result"""
         print(f"======{tool_name}======: {success}")
@@ -435,6 +511,7 @@ class EventManager:
                 event = Event(
                     type=TypeEnum.TOOL_USED,
                     tool=tool_name,
+                    plan_step_id=plan_id,
                     tool_status=ToolStatus.SUCCESS if success else ToolStatus.FAIL,
                     content=str(result),
                     tool_detail=ToolDetail(web_search=web_search),
@@ -476,15 +553,21 @@ class EventManager:
         # 3. str_replace_editor tool
         elif tool_name == "str_replace_editor":
             if isinstance(args, dict) and isinstance(result, base.ToolResult):
+                print(f"str_replace_editor args: {args}, result: {result}")
                 editor = StrReplaceEditor(
                     command=args.get("command", ""),
                     path=args.get("path", ""),
-                    result=result,
                     file_text=args.get("file_text"),
                     insert_line=args.get("insert_line"),
                     new_str=args.get("new_str"),
                     old_str=args.get("old_str"),
                     view_range=args.get("view_range"),
+                    result=ToolResult(
+                        output=result.output,
+                        base64_image=result.base64_image,
+                        error=result.error,
+                        system=result.system,
+                    ),
                 )
                 event = Event(
                     type=TypeEnum.TOOL_USED,
@@ -564,12 +647,30 @@ class EventManager:
                 await self.add_event(event)
                 return event
 
-        # 8. default: handle other tool types
+        # 8. python_execute tool
+        elif tool_name == "python_execute":
+            if isinstance(args, dict):
+                python_execute = PythonExecute(
+                    code=args.get("code", ""),
+                    result=PythonExecResul(
+                        output=result.get("observation", ""),
+                        success=result.get("success", False),
+                    ),
+                )
+                event = Event(
+                    type=TypeEnum.TOOL_USED,
+                    tool=tool_name,
+                    tool_status=ToolStatus.SUCCESS if success else ToolStatus.FAIL,
+                    content=str(result),
+                    tool_detail=ToolDetail(python_execute=python_execute),
+                )
+                await self.add_event(event)
+                return event
+
+        # 9. default: handle other tool types
         event = Event(
             type=TypeEnum.TOOL_USED,
             tool=tool_name,
-            tool_status=ToolStatus.SUCCESS if success else ToolStatus.FAIL,
-            content=str(result),
             tool_detail=ToolDetail(**{tool_name: args}) if args else None,
         )
         await self.add_event(event)

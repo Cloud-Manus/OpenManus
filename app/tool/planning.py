@@ -4,7 +4,6 @@ from typing import Dict, List, Literal, Optional
 from app.exceptions import ToolError
 from app.tool.base import BaseTool, ToolResult
 
-
 _PLANNING_TOOL_DESCRIPTION = """
 A planning tool that allows the agent to create and manage plans for solving complex tasks.
 The tool provides functionality for creating plans, updating plan steps, and tracking progress.
@@ -99,19 +98,26 @@ class PlanningTool(BaseTool):
         """
 
         if command == "create":
-            return self._create_plan(plan_id, title, steps)
+            result = self._create_plan(plan_id, title, steps)
+            return result
         elif command == "update":
-            return self._update_plan(plan_id, title, steps)
+            result = self._update_plan(plan_id, title, steps)
+            return result
         elif command == "list":
-            return self._list_plans()
+            result = self._list_plans()
+            return result
         elif command == "get":
-            return self._get_plan(plan_id)
+            result = self._get_plan(plan_id)
+            return result
         elif command == "set_active":
-            return self._set_active_plan(plan_id)
+            result = self._set_active_plan(plan_id)
+            return result
         elif command == "mark_step":
-            return self._mark_step(plan_id, step_index, step_status, step_notes)
+            result = self._mark_step(plan_id, step_index, step_status, step_notes)
+            return result
         elif command == "delete":
-            return self._delete_plan(plan_id)
+            result = self._delete_plan(plan_id)
+            return result
         else:
             raise ToolError(
                 f"Unrecognized command: {command}. Allowed commands are: create, update, list, get, set_active, mark_step, delete"

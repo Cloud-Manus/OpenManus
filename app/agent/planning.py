@@ -139,13 +139,14 @@ class PlanningAgent(ToolCallAgent):
         step_index = tracker["step_index"]
 
         try:
+            print("DEBUG  mark step", self.active_plan_id, step_index)
             # Mark the step as completed
             await self.available_tools.execute(
                 name="planning",
                 tool_input={
                     "command": "mark_step",
                     "plan_id": self.active_plan_id,
-                    "step_index": step_index,
+                    "step_index": str(step_index),
                     "step_status": "completed",
                 },
             )

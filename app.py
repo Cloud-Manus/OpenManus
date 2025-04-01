@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.event import EventManager
 from app.flow.flow_factory import FlowFactory, FlowType
 
 app = FastAPI()
@@ -51,6 +52,7 @@ class TaskManager:
         self.tasks = {}
         self.queues = {}
         self.running_tasks = {}  # Store running task coroutines
+        self.task_events = {}
 
     def create_task(self, prompt: str) -> Task:
         task_id = str(uuid.uuid4())
@@ -59,6 +61,7 @@ class TaskManager:
         )
         self.tasks[task_id] = task
         self.queues[task_id] = asyncio.Queue()
+        self.task_events[task_id] = []
         return task
 
     def store_running_task(self, task_id: str, task_coroutine):
@@ -153,24 +156,30 @@ async def run_task(task_id: str, prompt: str):
         # update task status
         task_manager.tasks[task_id].status = "running"
 
+        event_manager = EventManager()
+
         # create agent
         agent = Manus(
             name="Manus",
             description="A versatile agent that can solve various tasks using multiple tools",
+            event_manager=event_manager,
+            max_steps=2,
         )
-        # agents = {
-        #     "manus": Manus(),
-        # }
-        # agent = FlowFactory.create_flow(
-        #     flow_type=FlowType.PLANNING,
-        #     agents=agents,
-        # )
+
+        agents = {
+            "manus": agent,
+        }
+        agent = FlowFactory.create_flow(
+            flow_type=FlowType.PLANNING,
+            agents=agents,
+            event_manager=event_manager,
+        )
         # create event queue and connect to agent event manager
         queue = task_manager.queues[task_id]
         await agent.get_event_manager().connect_client(queue)
         # run agent
-        await agent.run(prompt)
-        # await agent.execute(prompt)
+        # await agent.run(prompt)
+        await agent.execute(prompt)
         # result = await agent.run(prompt)
         # # complete task
         # await task_manager.complete_task(task_id, result)
@@ -214,9 +223,9 @@ async def task_events(task_id: str):
 
                     # send event
                     yield f"event: {event_type}\ndata: {formatted_event}\n\n"
-
                     # check complete
                     if event_type == "complete":
+
                         break
 
                 except asyncio.TimeoutError:
