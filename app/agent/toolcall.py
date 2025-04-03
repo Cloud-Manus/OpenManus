@@ -7,9 +7,9 @@ from app.agent.react import ReActAgent
 from app.exceptions import TokenLimitExceeded
 from app.logger import logger
 from app.prompt.toolcall import NEXT_STEP_PROMPT, SYSTEM_PROMPT
-from app.schema import TOOL_CHOICE_TYPE, AgentState, Message, ToolCall, ToolChoice
+from app.schema import (TOOL_CHOICE_TYPE, AgentState, Message, ToolCall,
+                        ToolChoice)
 from app.tool import CreateChatCompletion, Terminate, ToolCollection
-
 
 TOOL_CALL_REQUIRED = "Tool calls required but none provided"
 
@@ -178,6 +178,7 @@ class ToolCallAgent(ReActAgent):
             # Execute the tool
             logger.info(f"🔧 Activating tool: '{name}'...")
             result = await self.available_tools.execute(name=name, tool_input=args)
+            logger.info(f"🔧 Activating tool: '{name}'... done, result: {result}")
             await self.event_manager.tool_result(
                 tool_name=name, args=args, result=result, success=True
             )

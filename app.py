@@ -178,11 +178,10 @@ async def run_task(task_id: str, prompt: str):
         queue = task_manager.queues[task_id]
         await agent.get_event_manager().connect_client(queue)
         # run agent
-        # await agent.run(prompt)
-        await agent.execute(prompt)
-        # result = await agent.run(prompt)
-        # # complete task
-        # await task_manager.complete_task(task_id, result)
+        result = await agent.execute(prompt)
+        # complete task
+        await task_manager.complete_task(task_id, result)
+        print(f"task complete")
     except Exception as e:
         print(f"task execution error: {str(e)}")
         await task_manager.fail_task(task_id, str(e))
@@ -201,48 +200,56 @@ async def task_events(task_id: str):
 
         yield ": heartbeat\n\n"
 
-        while True:
-            try:
-                current_time = time.time()
-                timeout = max(0.1, heartbeat_interval - (current_time - last_heartbeat))
-
+        try:
+            while True:
                 try:
-                    # wait event check timeout heatbreat
-                    event = await asyncio.wait_for(queue.get(), timeout=timeout)
-
-                    if isinstance(event, dict):
-                        event_type = event.get("type", "unknown")
-                        formatted_event = dumps(event)
-                    else:
-                        event_type = (
-                            event.type.value
-                            if hasattr(event.type, "value")
-                            else str(event.type)
-                        )
-                        formatted_event = event.model_dump_json()
-
-                    # send event
-                    yield f"event: {event_type}\ndata: {formatted_event}\n\n"
-                    # check complete
-                    if event_type == "complete":
-
-                        break
-
-                except asyncio.TimeoutError:
-                    # timeout no resonse
                     current_time = time.time()
-                    if current_time - last_heartbeat >= heartbeat_interval:
-                        yield ": heartbeat\n\n"
-                        last_heartbeat = current_time
-                    continue
+                    timeout = max(0.1, heartbeat_interval - (current_time - last_heartbeat))
 
-            except asyncio.CancelledError:
-                print(f"client : {task_id}")
-                break
-            except Exception as e:
-                print(f"event stram err: {str(e)}")
-                yield f"event: error\ndata: {dumps({'message': str(e)})}\n\n"
-                break
+                    try:
+                        # wait event check timeout heatbreat
+                        event = await asyncio.wait_for(queue.get(), timeout=timeout)
+
+                        if isinstance(event, dict):
+                            event_type = event.get("type", "unknown")
+                            formatted_event = dumps(event)
+                        else:
+                            event_type = (
+                                event.type.value
+                                if hasattr(event.type, "value")
+                                else str(event.type)
+                            )
+                            formatted_event = event.model_dump_json()
+
+                        # send event
+                        yield f"event: {event_type}\ndata: {formatted_event}\n\n"
+                        # check complete
+                        if event_type == "complete":
+                            print(f"Task {task_id} completed, closing SSE connection")
+                            break
+
+                    except asyncio.TimeoutError:
+                        # timeout no resonse
+                        current_time = time.time()
+                        if current_time - last_heartbeat >= heartbeat_interval:
+                            yield ": heartbeat\n\n"
+                            last_heartbeat = current_time
+                        continue
+
+                except asyncio.CancelledError:
+                    print(f"SSE connection for task {task_id} cancelled")
+                    break
+                except Exception as e:
+                    print(f"Event stream error: {str(e)}")
+                    yield f"event: error\ndata: {dumps({'message': str(e)})}\n\n"
+                    break
+        finally:
+            # Ensure we clean up the connection resources when done
+            print(f"Closing SSE connection for task {task_id}")
+            if task_id in task_manager.queues:
+                # Don't actually close the queue, as it may still be needed by the task
+                # Just send a final message to confirm disconnection
+                yield f"event: disconnect\ndata: {dumps({'message': 'Connection closed'})}\n\n"
 
     return StreamingResponse(
         event_generator(),
