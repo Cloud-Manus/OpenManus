@@ -6,6 +6,13 @@ api_key = "YOUR_API_KEY"                    # Your API key
 max_tokens = 8192                           # Maximum number of tokens in the response
 temperature = 0.0                           # Controls randomness
 
+[r2]
+account_id = "YOUR_ACCOUNT_ID"
+access_key_id = "YOUR_ACCESS_KEY_ID"
+secret_access_key = "YOUR_SECRET_ACCESS_KEY"
+bucket = "YOUR_BUCKET"
+domain = "YOUR_DOMAIN"
+
 # [llm] # Amazon Bedrock
 # api_type = "aws"                                       # Required
 # model = "us.anthropic.claude-3-7-sonnet-20250219-v1:0" # Bedrock supported modelID

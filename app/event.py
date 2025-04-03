@@ -157,6 +157,27 @@ class WebSearch:
     result: List[str]
 
 
+class COSUpload(BaseModel):
+    """COS upload operation details"""
+
+    file_path: Optional[str] = None
+    content: Optional[str] = None
+    file_name: Optional[str] = None
+    directory: Optional[str] = None
+    url: Optional[str] = None
+    result: Optional[ToolResult] = None
+
+
+class R2Upload(BaseModel):
+    """R2 upload operation details"""
+
+    file_path: Optional[str] = None
+    content: Optional[str] = None
+    file_name: Optional[str] = None
+    directory: Optional[str] = None
+    result: Optional[ToolResult] = None
+
+
 @dataclass
 class ToolDetail:
     """tool result detail"""
@@ -168,6 +189,7 @@ class ToolDetail:
     web_search: Optional[WebSearch] = None
     str_replace_editor: Optional[StrReplaceEditor] = None
     terminate: Optional[Terminate] = None
+    r2_upload: Optional[R2Upload] = None
 
 
 class ToolStatus(str, Enum):
@@ -261,9 +283,9 @@ class CreateChatCompletion(BaseModel):
 class StrReplaceEditor(BaseModel):
     """str replace editor detail"""
 
-    command: str
-    path: str
-    result: ToolResult
+    command: Optional[str] = None
+    path: Optional[str] = None
+    result: Optional[ToolResult] = None
     file_text: Optional[str] = None
     insert_line: Optional[str] = None
     new_str: Optional[str] = None
@@ -290,9 +312,11 @@ class Planning(BaseModel):
     steps: Optional[List[str]] = None
     title: Optional[str] = None
 
+
 class PythonExecResul(BaseModel):
     output: Optional[str] = None
     success: Optional[bool] = None
+
 
 class PythonExecute(BaseModel):
     """python execute detail"""
@@ -312,6 +336,8 @@ class ToolDetail(BaseModel):
     str_replace_editor: Optional[StrReplaceEditor] = None
     terminate: Optional[Terminate] = None
     python_execute: Optional[PythonExecute] = None
+    cos_upload: Optional[COSUpload] = None
+    r2_upload: Optional[R2Upload] = None
 
 
 class Event(BaseModel):
@@ -457,7 +483,9 @@ class EventManager:
             python_execute = PythonExecute(
                 code=args.get("code", ""),
                 result=PythonExecResul(
-                    output=(result.output if hasattr(result, "output") else str(result)),
+                    output=(
+                        result.output if hasattr(result, "output") else str(result)
+                    ),
                     success=success,
                 ),
             )
@@ -622,10 +650,64 @@ class EventManager:
             await self.add_event(event)
             return event
 
-        # # 6. create_chat_completion tool
-        # elif tool_name == "create_chat_completion":
+        # 6. cos_upload tool
+        elif tool_name == "cos_upload":
+            if isinstance(args, dict) and isinstance(result, base.ToolResult):
+                cos_upload = COSUpload(
+                    file_path=args.get("file_path"),
+                    content=args.get("content"),
+                    file_name=args.get("file_name"),
+                    directory=args.get("directory"),
+                    url=args.get("url"),
+                    result=ToolResult(
+                        output=result.output,
+                        base64_image=result.base64_image,
+                        error=result.error,
+                        system=result.system,
+                    ),
+                )
+                event = Event(
+                    type=TypeEnum.TOOL_USED,
+                    tool=tool_name,
+                    tool_status=ToolStatus.SUCCESS if success else ToolStatus.FAIL,
+                    content=str(result),
+                    tool_detail=ToolDetail(cos_upload=cos_upload),
+                )
+                await self.add_event(event)
+                return event
 
-        # 7. planning tool
+        # 7. r2_upload tool
+        elif tool_name == "r2_upload":
+            if isinstance(args, dict) and isinstance(result, base.ToolResult):
+                result_dict = {
+                    "output": (
+                        result.output if hasattr(result, "output") else str(result)
+                    ),
+                    "base64_image": (
+                        result.base64_image if hasattr(result, "base64_image") else None
+                    ),
+                    "error": result.error if hasattr(result, "error") else None,
+                    "system": result.system if hasattr(result, "system") else None,
+                }
+
+                r2_upload = R2Upload(
+                    file_path=args.get("file_path"),
+                    content=args.get("content"),
+                    file_name=args.get("file_name"),
+                    directory=args.get("directory"),
+                    result=result_dict,
+                )
+                event = Event(
+                    type=TypeEnum.TOOL_USED,
+                    tool=tool_name,
+                    tool_status=ToolStatus.SUCCESS if success else ToolStatus.FAIL,
+                    content=str(result),
+                    tool_detail=ToolDetail(r2_upload=r2_upload),
+                )
+                await self.add_event(event)
+                return event
+
+        # 8. planning tool
         elif tool_name == "planning":
             if isinstance(args, dict) and isinstance(result, base.ToolResult):
                 planning = Planning(
@@ -648,7 +730,7 @@ class EventManager:
                 await self.add_event(event)
                 return event
 
-        # 8. python_execute tool
+        # 9. python_execute tool
         elif tool_name == "python_execute":
             if isinstance(args, dict):
                 python_execute = PythonExecute(
@@ -668,7 +750,7 @@ class EventManager:
                 await self.add_event(event)
                 return event
 
-        # 9. default: handle other tool types
+        # 10. default: handle other tool types
         event = Event(
             type=TypeEnum.TOOL_USED,
             tool=tool_name,

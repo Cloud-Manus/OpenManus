@@ -16,6 +16,22 @@ PROJECT_ROOT = get_project_root()
 WORKSPACE_ROOT = PROJECT_ROOT / "workspace"
 
 
+class COSConfig(BaseModel):
+    bucket: str = Field(..., description="COS bucket name")
+    region: str = Field(..., description="COS region")
+    secret_id: str = Field(..., description="COS secret id")
+    secret_key: str = Field(..., description="COS secret key")
+    domain: str = Field(..., description="COS domain")
+
+
+class R2Config(BaseModel):
+    account_id: str = Field(..., description="Cloudflare account ID")
+    access_key_id: str = Field(..., description="R2 access key ID")
+    secret_access_key: str = Field(..., description="R2 secret access key")
+    bucket: str = Field(..., description="R2 bucket name")
+    domain: Optional[str] = Field(None, description="Optional custom domain")
+
+
 class LLMSettings(BaseModel):
     model: str = Field(..., description="Model name")
     base_url: str = Field(..., description="API base URL")
@@ -102,6 +118,8 @@ class AppConfig(BaseModel):
     search_config: Optional[SearchSettings] = Field(
         None, description="Search configuration"
     )
+    cos: Optional[COSConfig] = Field(None, description="COS configuration")
+    r2: Optional[R2Config] = Field(None, description="R2 configuration")
 
     class Config:
         arbitrary_types_allowed = True
@@ -264,6 +282,23 @@ class Config:
         else:
             sandbox_settings = SandboxSettings()
 
+        # Handle COS config
+        cos_config = raw_config.get("cos", {})
+        cos_settings = None
+        if cos_config and all(
+            k in cos_config for k in ["bucket", "region", "secret_id", "secret_key"]
+        ):
+            cos_settings = COSConfig(**cos_config)
+
+        # Handle R2 config
+        r2_config = raw_config.get("r2", {})
+        r2_settings = None
+        if r2_config and all(
+            k in r2_config
+            for k in ["account_id", "access_key_id", "secret_access_key", "bucket"]
+        ):
+            r2_settings = R2Config(**r2_config)
+
         config_dict = {
             "llm": {
                 "default": default_settings,
@@ -275,6 +310,8 @@ class Config:
             "sandbox": sandbox_settings,
             "browser_config": browser_settings,
             "search_config": search_settings,
+            "cos": cos_settings,
+            "r2": r2_settings,
         }
 
         self._config = AppConfig(**config_dict)
@@ -320,6 +357,16 @@ class Config:
     def root_path(self) -> Path:
         """Get the root path of the application"""
         return PROJECT_ROOT
+
+    @property
+    def cos(self) -> COSConfig:
+        """Get the COS config"""
+        return self._config.cos
+
+    @property
+    def r2(self) -> R2Config:
+        """Get the R2 config"""
+        return self._config.r2
 
 
 config = Config()
