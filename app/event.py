@@ -496,7 +496,6 @@ class EventManager:
         plan_id: str = "",
     ) -> Event:
         """process tool result"""
-        print(f"======{tool_name}======: {success}")
         # 1. web_search tool
         if tool_name == "web_search":
             if isinstance(args, dict) and isinstance(result, base.ToolResult):

@@ -7,6 +7,7 @@ from browser_use import Browser as BrowserUseBrowser
 from browser_use import BrowserConfig
 from browser_use.browser.context import BrowserContext, BrowserContextConfig
 from browser_use.dom.service import DomService
+from playwright.async_api import Page
 from pydantic import Field, field_validator
 from pydantic_core.core_schema import ValidationInfo
 
@@ -200,6 +201,13 @@ class BrowserUseTool(BaseTool, Generic[Context]):
 
         return self.context
 
+    async def _take_screenshot(self, page: Page) -> str:
+        if page is None:
+            return None
+        screenshot = await page.screenshot(full_page=True)
+        screenshot = base64.b64encode(screenshot).decode("utf-8")
+        return screenshot
+
     async def execute(
         self,
         action: str,
@@ -250,16 +258,21 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                         )
                     page = await context.get_current_page()
                     await page.goto(url)
+                    screenshot = await self._take_screenshot(page)
                     await page.wait_for_load_state()
-                    return ToolResult(output=f"Navigated to {url}")
+                    return ToolResult(output=f"Navigated to {url}", base64_image=screenshot)
 
                 elif action == "go_back":
                     await context.go_back()
-                    return ToolResult(output="Navigated back")
+                    page = await context.get_current_page()
+                    screenshot = await self._take_screenshot(page)
+                    return ToolResult(output="Navigated back", base64_image=screenshot)
 
                 elif action == "refresh":
                     await context.refresh_page()
-                    return ToolResult(output="Refreshed current page")
+                    page = await context.get_current_page()
+                    screenshot = await self._take_screenshot(page)
+                    return ToolResult(output="Refreshed current page", base64_image=screenshot)
 
                 elif action == "web_search":
                     if not query:
@@ -283,10 +296,11 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                         page = await context.get_current_page()
                         await page.goto(url_to_navigate)
                         await page.wait_for_load_state()
-
+                        screenshot = await self._take_screenshot(page)
                         return ToolResult(
                             output=f"Searched for '{query}' and navigated to first result: {url_to_navigate}\nAll results:"
-                            + "\n".join([str(r) for r in search_results])
+                            + "\n".join([str(r) for r in search_results]),
+                            base64_image=screenshot,
                         )
                     else:
                         return ToolResult(
@@ -299,6 +313,8 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                         return ToolResult(
                             error="Index is required for 'click_element' action"
                         )
+                    page = await context.get_current_page()
+                    screenshot = await self._take_screenshot(page)
                     element = await context.get_dom_element_by_index(index)
                     if not element:
                         return ToolResult(error=f"Element with index {index} not found")
@@ -306,19 +322,22 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                     output = f"Clicked element at index {index}"
                     if download_path:
                         output += f" - Downloaded file to {download_path}"
-                    return ToolResult(output=output)
+                    return ToolResult(output=output, base64_image=screenshot)
 
                 elif action == "input_text":
                     if index is None or not text:
                         return ToolResult(
                             error="Index and text are required for 'input_text' action"
                         )
+                    page = await context.get_current_page()
+                    screenshot = await self._take_screenshot(page)
                     element = await context.get_dom_element_by_index(index)
                     if not element:
                         return ToolResult(error=f"Element with index {index} not found")
                     await context._input_text_element_node(element, text)
                     return ToolResult(
-                        output=f"Input '{text}' into element at index {index}"
+                        output=f"Input '{text}' into element at index {index}",
+                        base64_image=screenshot,
                     )
 
                 elif action == "scroll_down" or action == "scroll_up":
@@ -331,8 +350,11 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                     await context.execute_javascript(
                         f"window.scrollBy(0, {direction * amount});"
                     )
+                    page = await context.get_current_page()
+                    screenshot = await self._take_screenshot(page)
                     return ToolResult(
-                        output=f"Scrolled {'down' if direction > 0 else 'up'} by {amount} pixels"
+                        output=f"Scrolled {'down' if direction > 0 else 'up'} by {amount} pixels",
+                        base64_image=screenshot,
                     )
 
                 elif action == "scroll_to_text":
@@ -344,7 +366,11 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                     try:
                         locator = page.get_by_text(text, exact=False)
                         await locator.scroll_into_view_if_needed()
-                        return ToolResult(output=f"Scrolled to text: '{text}'")
+                        screenshot = await self._take_screenshot(page)
+                        return ToolResult(
+                            output=f"Scrolled to text: '{text}'",
+                            base64_image=screenshot,
+                        )
                     except Exception as e:
                         return ToolResult(error=f"Failed to scroll to text: {str(e)}")
 
@@ -355,7 +381,11 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                         )
                     page = await context.get_current_page()
                     await page.keyboard.press(keys)
-                    return ToolResult(output=f"Sent keys: {keys}")
+                    screenshot = await self._take_screenshot(page)
+                    return ToolResult(
+                        output=f"Sent keys: {keys}",
+                        base64_image=screenshot,
+                    )
 
                 elif action == "get_dropdown_options":
                     if index is None:
@@ -366,6 +396,7 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                     if not element:
                         return ToolResult(error=f"Element with index {index} not found")
                     page = await context.get_current_page()
+                    screenshot = await self._take_screenshot(page)
                     options = await page.evaluate(
                         """
                         (xpath) => {
@@ -381,7 +412,7 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                     """,
                         element.xpath,
                     )
-                    return ToolResult(output=f"Dropdown options: {options}")
+                    return ToolResult(output=f"Dropdown options: {options}", base64_image=screenshot)
 
                 elif action == "select_dropdown_option":
                     if index is None or not text:
@@ -392,9 +423,11 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                     if not element:
                         return ToolResult(error=f"Element with index {index} not found")
                     page = await context.get_current_page()
+                    screenshot = await self._take_screenshot(page)
                     await page.select_option(element.xpath, label=text)
                     return ToolResult(
-                        output=f"Selected option '{text}' from dropdown at index {index}"
+                        output=f"Selected option '{text}' from dropdown at index {index}",
+                        base64_image=screenshot,
                     )
 
                 # Content extraction actions
@@ -407,6 +440,7 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                     try:
                         # Get page content and convert to markdown for better processing
                         html_content = await page.content()
+                        screenshot = await self._take_screenshot(page)
 
                         # Import markdownify here to avoid global import
                         try:
@@ -500,7 +534,7 @@ Page content:
                         else:
                             msg = "No content was extracted from the page."
 
-                        return ToolResult(output=msg)
+                        return ToolResult(output=msg, base64_image=screenshot)
                     except Exception as e:
                         # Provide a more helpful error message
                         error_msg = f"Failed to extract content: {str(e)}"
@@ -520,15 +554,17 @@ Page content:
                             error="Tab ID is required for 'switch_tab' action"
                         )
                     await context.switch_to_tab(tab_id)
-                    page = await context.get_current_page()
                     await page.wait_for_load_state()
-                    return ToolResult(output=f"Switched to tab {tab_id}")
+                    screenshot = await self._take_screenshot(page)
+                    return ToolResult(output=f"Switched to tab {tab_id}", base64_image=screenshot)
 
                 elif action == "open_tab":
                     if not url:
                         return ToolResult(error="URL is required for 'open_tab' action")
                     await context.create_new_tab(url)
-                    return ToolResult(output=f"Opened new tab with {url}")
+                    page = await context.get_current_page()
+                    screenshot = await self._take_screenshot(page)
+                    return ToolResult(output=f"Opened new tab with {url}", base64_image=screenshot)
 
                 elif action == "close_tab":
                     await context.close_current_tab()
