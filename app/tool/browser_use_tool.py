@@ -16,7 +16,6 @@ from app.llm import LLM
 from app.tool.base import BaseTool, ToolResult
 from app.tool.web_search import WebSearch
 
-
 _BROWSER_DESCRIPTION = """
 Interact with a web browser to perform various actions such as navigation, element interaction, content extraction, and tab management. This tool provides a comprehensive set of browser automation capabilities:
 
@@ -301,6 +300,7 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                             output=f"Searched for '{query}' and navigated to first result: {url_to_navigate}\nAll results:"
                             + "\n".join([str(r) for r in search_results]),
                             base64_image=screenshot,
+                            target_url=url_to_navigate,
                         )
                     else:
                         return ToolResult(

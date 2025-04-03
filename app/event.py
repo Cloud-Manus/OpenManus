@@ -216,6 +216,7 @@ class ToolResult(BaseModel):
     base64_image: Optional[str] = None
     error: Optional[str] = None
     system: Optional[str] = None
+    target_url: Optional[str] = None
 
 
 class BrowserUseTool(BaseModel):
@@ -537,6 +538,7 @@ class EventManager:
                         base64_image=result.base64_image,
                         error=result.error,
                         system=result.system,
+                        target_url=result.target_url,
                     ),
                 )
                 event = Event(
