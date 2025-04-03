@@ -163,22 +163,26 @@ async def run_task(task_id: str, prompt: str):
             name="Manus",
             description="A versatile agent that can solve various tasks using multiple tools",
             event_manager=event_manager,
-            max_steps=2,
+            max_steps=20,
         )
-
-        agents = {
-            "manus": agent,
-        }
-        agent = FlowFactory.create_flow(
-            flow_type=FlowType.PLANNING,
-            agents=agents,
-            event_manager=event_manager,
-        )
+        if args.flow:
+            agents = {
+                "manus": agent,
+            }
+            agent = FlowFactory.create_flow(
+                flow_type=FlowType.PLANNING,
+                agents=agents,
+                event_manager=event_manager,
+            )
         # create event queue and connect to agent event manager
         queue = task_manager.queues[task_id]
         await agent.get_event_manager().connect_client(queue)
-        # run agent
-        result = await agent.execute(prompt)
+        if args.flow:
+            # run agent
+            result = await agent.execute(prompt)
+        else:
+            # run agent
+            result = await agent.run(prompt)
         # complete task
         await task_manager.complete_task(task_id, result)
         print(f"task complete")
@@ -341,7 +345,12 @@ if __name__ == "__main__":
         default=8000,
         help="Server listening port (default: %(default)s)",
     )
-
+    parser.add_argument(
+        "--flow",
+        type=bool,
+        default=False,
+        help="Enable flow mode (default: %(default)s)",
+    )
     # parse command line arguments.
     args = parser.parse_args()
 

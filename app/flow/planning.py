@@ -55,8 +55,25 @@ class PlanningFlow(BaseFlow):
         self, agents: Union[BaseAgent, List[BaseAgent], Dict[str, BaseAgent]], **data
     ):
         # Set executor keys before super().__init__
-        if "executors" in data:
-            data["executor_keys"] = data.pop("executors")
+        if not isinstance(agents, dict):
+            super().__init__(agents, **data)
+        else:
+            super().__init__(agents=agents, **data)
+
+        # If executor_keys not provided, use all agent keys or "primary" as default
+        if not self.executor_keys:
+            if isinstance(agents, dict) and agents:
+                self.executor_keys = list(self.agents.keys())
+            else:
+                self.executor_keys = ["primary"]
+
+        # Set planning tool reference in agents that need it
+        for agent in self.agents.values():
+            # Connect planning_tool to agent's finish tool if available
+            if hasattr(agent, "available_tools"):
+                for tool in agent.available_tools.tools:
+                    if tool.name == "finish" and hasattr(tool, "set_planning_tool"):
+                        tool.set_planning_tool(self.planning_tool)
 
         # Set plan ID if provided
         if "plan_id" in data:
@@ -69,10 +86,6 @@ class PlanningFlow(BaseFlow):
 
         # Call parent's init with the processed data
         super().__init__(agents, **data)
-
-        # Set executor_keys to all agent keys if not specified
-        if not self.executor_keys:
-            self.executor_keys = list(self.agents.keys())
 
     def get_executor(self, step_type: Optional[str] = None) -> BaseAgent:
         """

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import time
 import uuid
 from collections import deque
@@ -178,21 +179,6 @@ class R2Upload(BaseModel):
     result: Optional[ToolResult] = None
 
 
-@dataclass
-class ToolDetail:
-    """tool result detail"""
-
-    create_chat_completion: Optional[CreateChatCompletion] = None
-    planning: Optional[Planning] = None
-    bash: Optional[Bash] = None
-    browser_use: Optional[BrowserUseTool] = None
-    web_search: Optional[WebSearch] = None
-    str_replace_editor: Optional[StrReplaceEditor] = None
-    terminate: Optional[Terminate] = None
-    r2_upload: Optional[R2Upload] = None
-    finish: Optional[str] = None
-
-
 class ToolStatus(str, Enum):
     """tool usage status enum - use str inheritance for automatic serialization"""
 
@@ -323,7 +309,7 @@ class PythonExecute(BaseModel):
     """python execute detail"""
 
     code: Optional[str] = None
-    result: Optional[PythonExecResul] = None
+    result: Optional[ToolResult] = None
 
 
 class DeployWebsite(BaseModel):
@@ -334,6 +320,16 @@ class DeployWebsite(BaseModel):
     file_count: Optional[int] = None
     entry_url: Optional[str] = None
     result: Optional[ToolResult] = None
+
+
+class VerifyWebsite(BaseModel):
+    url: str
+    title: Optional[str] = None
+    status_code: Optional[int] = None
+    success: bool = False
+    issue_count: Optional[int] = None
+    success_count: Optional[int] = None
+    resource_count: Optional[int] = None
 
 
 class ToolDetail(BaseModel):
@@ -350,6 +346,7 @@ class ToolDetail(BaseModel):
     cos_upload: Optional[COSUpload] = None
     r2_upload: Optional[R2Upload] = None
     deploy_website: Optional[DeployWebsite] = None
+    verify_website: Optional[VerifyWebsite] = None
     finish: Optional[str] = None
 
 
@@ -495,11 +492,12 @@ class EventManager:
         if tool_name == "python_execute":
             python_execute = PythonExecute(
                 code=args.get("code", ""),
-                result=PythonExecResul(
+                result=ToolResult(
                     output=(
                         result.output if hasattr(result, "output") else str(result)
                     ),
-                    success=success,
+                    error=None,
+                    system=None,
                 ),
             )
             event = Event(
@@ -727,8 +725,6 @@ class EventManager:
                 # Extract file count from result output if available
                 file_count = None
                 if hasattr(result, "output"):
-                    import re
-
                     count_match = re.search(r"Files uploaded \((\d+)\)", result.output)
                     if count_match:
                         file_count = int(count_match.group(1))
@@ -791,9 +787,10 @@ class EventManager:
             if isinstance(args, dict):
                 python_execute = PythonExecute(
                     code=args.get("code", ""),
-                    result=PythonExecResul(
+                    result=ToolResult(
                         output=result.get("observation", ""),
-                        success=result.get("success", False),
+                        error=None,
+                        system=None,
                     ),
                 )
                 event = Event(
@@ -825,7 +822,67 @@ class EventManager:
             await self.complete(finish_result)
             return event
 
-        # 12. default: handle other tool types
+        # 12. verify_website tool
+        elif tool_name == "verify_website":
+            # Convert tool result to dict
+            result_dict = {
+                "output": result.output,
+                "error": result.error,
+                "url": getattr(result, "url", None),
+            }
+
+            # Extract metadata from output
+            title_match = re.search(r"Title: (.*)\n", result.output)
+            title = title_match.group(1) if title_match else None
+
+            status_match = re.search(r"Status: (\d+)\n", result.output)
+            status_code = int(status_match.group(1)) if status_match else None
+
+            resource_match = re.search(r"Resource count: (\d+)\n", result.output)
+            resource_count = int(resource_match.group(1)) if resource_match else None
+
+            success_count_match = re.search(r"(\d+)\. ", result.output)
+            success_count = (
+                len(
+                    re.findall(r"Successes:\n(.*?)(?:\n\n|$)", result.output, re.DOTALL)
+                )
+                if "Successes:" in result.output
+                else 0
+            )
+
+            issue_count_match = (
+                re.search(r"(\d+) issues found", result.error) if result.error else None
+            )
+            issue_count = int(issue_count_match.group(1)) if issue_count_match else 0
+
+            # Determine success based on error
+            success = result.error is None or "mostly successful" in result.output
+
+            # Create VerifyWebsite instance
+            verify_website = VerifyWebsite(
+                url=result_dict.get("url", ""),
+                title=title,
+                status_code=status_code,
+                success=success,
+                issue_count=issue_count,
+                success_count=success_count,
+                resource_count=resource_count,
+            )
+
+            # Create event
+            event = Event(
+                type=TypeEnum.TOOL_USED,
+                tool=tool_name,
+                tool_status=ToolStatus.SUCCESS if success else ToolStatus.FAIL,
+                content=f"Website verification {'succeeded' if success else 'failed'}: {verify_website.url}",
+                tool_detail=ToolDetail(
+                    verify_website=verify_website,
+                ),
+            )
+            await self.add_event(event)
+            return event
+
+        # 13. default: handle other tool types
         event = Event(
             type=TypeEnum.TOOL_USED,
             tool=tool_name,
