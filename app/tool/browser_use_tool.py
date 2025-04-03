@@ -300,7 +300,7 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                             output=f"Searched for '{query}' and navigated to first result: {url_to_navigate}\nAll results:"
                             + "\n".join([str(r) for r in search_results]),
                             base64_image=screenshot,
-                            target_url=url_to_navigate,
+                            url=url_to_navigate,
                         )
                     else:
                         return ToolResult(
