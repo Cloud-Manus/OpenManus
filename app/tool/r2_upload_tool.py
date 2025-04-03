@@ -34,11 +34,8 @@ class R2UploadTool(BaseTool):
     name: str = "r2_upload"
     description: str = (
         "Upload files or text content to Cloudflare R2 storage and get a public access URL. "
-        "Supports uploading complete web applications including HTML games with proper directory structure. "
-        "When uploading multiple related files (like HTML, CSS, JS and images), maintain their original "
-        "directory structure to preserve internal references. For web applications or games, upload all "
-        "files to the same directory structure and access them via the main HTML file URL. "
-        "Examples: Upload an HTML game with its assets; publish web content; share documents or images. "
+        "This tool handles single file uploads and returns the direct URL to the uploaded content. "
+        "Provide either a file path to upload an existing file, or raw content and a filename to create and upload new content. "
         "All uploaded files are publicly accessible via the returned URL."
     )
     parameters: dict = {
@@ -46,20 +43,20 @@ class R2UploadTool(BaseTool):
         "properties": {
             "file_path": {
                 "type": "string",
-                "description": "Local file path to upload. For HTML games or web apps, specify the main HTML file first.",
+                "description": "Local file path to upload.",
             },
             "content": {
                 "type": "string",
-                "description": "Text content to upload (HTML, text, etc.). Used when directly creating files without local source.",
+                "description": "Text content to upload when not using an existing file.",
             },
             "file_name": {
                 "type": "string",
-                "description": "Specify the file name for upload (auto-generated if not provided). For HTML files, 'index.html' is recommended.",
+                "description": "Specify the file name for upload (auto-generated if not provided).",
                 "default": "",
             },
             "directory": {
                 "type": "string",
-                "description": "Target directory path in R2 (without leading/trailing slashes). Important for multi-file applications to maintain structure. Example: 'games/tetris' for a Tetris game.",
+                "description": "Target directory path in R2 (without leading/trailing slashes).",
                 "default": "",
             },
         },
@@ -103,8 +100,8 @@ class R2UploadTool(BaseTool):
                     logger.warning(
                         "R2 configuration incomplete, tool may not function properly"
                     )
-                else:
-                    logger.info("R2 configuration loaded successfully")
+                # else:
+                #     logger.info("R2 configuration loaded successfully")
             else:
                 logger.warning("R2 configuration not found in config")
         except Exception as e:

@@ -6,6 +6,8 @@ from app.prompt.browser import NEXT_STEP_PROMPT as BROWSER_NEXT_STEP_PROMPT
 from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
 from app.tool import Terminate, ToolCollection
 from app.tool.browser_use_tool import BrowserUseTool
+from app.tool.deploy.deploy_website_tool import DeployWebsiteTool
+from app.tool.finish import FinishTool
 from app.tool.python_execute import PythonExecute
 from app.tool.r2_upload_tool import R2UploadTool
 from app.tool.str_replace_editor import StrReplaceEditor
@@ -38,7 +40,8 @@ class Manus(BrowserAgent):
             BrowserUseTool(),
             StrReplaceEditor(),
             Terminate(),
-            R2UploadTool(),
+            DeployWebsiteTool(),
+            FinishTool(),
         )
     )
 

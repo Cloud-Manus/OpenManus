@@ -175,7 +175,7 @@ class PlanningFlow(BaseFlow):
 
                     # Execute the tool via ToolCollection instead of directly
                     result = await self.planning_tool.execute(**args)
-                    # 通过事件管理器记录事件
+                    # use event manager to record event
                     if hasattr(self, "event_manager") and self.event_manager:
                         await self.event_manager.planning_result(args, result)
                     logger.info(f"Plan creation result: {str(result)}")
@@ -192,7 +192,7 @@ class PlanningFlow(BaseFlow):
             "steps": ["Analyze request", "Execute task", "Verify results"],
         }
         result = await self.planning_tool.execute(**args)
-        # 通过事件管理器记录事件
+        # use event manager to record event
         if hasattr(self, "event_manager") and self.event_manager:
             await self.event_manager.planning_result(args, result)
 
@@ -262,7 +262,7 @@ class PlanningFlow(BaseFlow):
             return None, None
 
     async def _execute_step(self, executor: BaseAgent, step_info: dict) -> str:
-        """Execute the current step with the specified agent using agent.run()."""
+        """Execute a single step using the given agent."""
         # Prepare context for the agent with current plan status
         plan_status = await self._get_plan_text()
         step_text = step_info.get("text", f"Step {self.current_step_index}")
@@ -275,15 +275,32 @@ class PlanningFlow(BaseFlow):
         YOUR CURRENT TASK:
         You are now working on step {self.current_step_index}: "{step_text}"
 
-        Please execute this step using the appropriate tools. When you're done, provide a summary of what you accomplished.
+        Execute this step using the appropriate tools. When you're done, provide a summary of what you accomplished.
+
+        IMPORTANT: If you determine that the entire task is now complete, use the 'finish' tool with a final result instead of proceeding to the next step.
         """
 
         # Use agent.run() to execute the step
         try:
             step_result = await executor.run(step_prompt)
 
-            # Mark the step as completed after successful execution
-            await self._mark_step_completed()
+            # Check if finish tool was called
+            finish_called = False
+            if hasattr(executor, "available_tools"):
+                for tool in executor.available_tools.tools:
+                    if (
+                        tool.name == "finish"
+                        and hasattr(tool, "task_complete")
+                        and tool.task_complete
+                    ):
+                        finish_called = True
+                        executor.state = AgentState.FINISHED
+                        logger.info("Finish tool called: task will be completed")
+                        break
+
+            # If finish tool wasn't called, mark current step as completed
+            if not finish_called:
+                await self._mark_step_completed()
 
             return step_result
         except Exception as e:
@@ -296,7 +313,11 @@ class PlanningFlow(BaseFlow):
             return
 
         try:
-            print("DEBUG  ======== mark step", self.active_plan_id, self.current_step_index)
+            print(
+                "DEBUG  ======== mark step",
+                self.active_plan_id,
+                self.current_step_index,
+            )
             # Mark the step as completed
             args = {
                 "command": "mark_step",
@@ -306,7 +327,12 @@ class PlanningFlow(BaseFlow):
             }
             result = await self.planning_tool.execute(**args)
             if hasattr(self, "event_manager") and self.event_manager:
-                print("DEBUG  ======== mark step", self.active_plan_id, self.current_step_index, result)
+                print(
+                    "DEBUG  ======== mark step",
+                    self.active_plan_id,
+                    self.current_step_index,
+                    result,
+                )
                 await self.event_manager.planning_result(args, result)
 
             logger.info(
@@ -396,39 +422,51 @@ class PlanningFlow(BaseFlow):
             return f"Error: Unable to retrieve plan with ID {self.active_plan_id}"
 
     async def _finalize_plan(self) -> str:
-        """Finalize the plan and provide a summary using the flow's LLM directly."""
-        plan_text = await self._get_plan_text()
+        """Finalize the plan and provide a summary of results."""
+        logger.info(f"Finalizing plan with ID: {self.active_plan_id}")
 
-        # Create a summary using the flow's LLM directly
-        try:
-            system_message = Message.system_message(
-                "You are a planning assistant. Your task is to summarize the completed plan."
-            )
+        # Check for finish tool results
+        final_result = ""
+        for agent_key, agent in self.agents.items():
+            if hasattr(agent, "available_tools"):
+                for tool in agent.available_tools.tools:
+                    if (
+                        tool.name == "finish"
+                        and hasattr(tool, "task_complete")
+                        and tool.task_complete
+                    ):
+                        if hasattr(tool, "last_result") and tool.last_result:
+                            final_result = tool.last_result
+                            logger.info(
+                                f"Found finish result from agent {agent_key}: {final_result}"
+                            )
+                            break
 
-            user_message = Message.user_message(
-                f"The plan has been completed. Here is the final plan status:\n\n{plan_text}\n\nPlease provide a summary of what was accomplished and any final thoughts."
-            )
+        # If no finish result found, generate one based on the plan
+        if not final_result:
+            plan_text = await self._get_plan_text()
 
-            response = await self.llm.ask(
-                messages=[user_message], system_msgs=[system_message]
-            )
-
-            return f"Plan completed:\n\n{response}"
-        except Exception as e:
-            logger.error(f"Error finalizing plan with LLM: {e}")
-
-            # Fallback to using an agent for the summary
+            # Create a summary using the flow's LLM
             try:
-                agent = self.primary_agent
-                summary_prompt = f"""
-                The plan has been completed. Here is the final plan status:
+                system_message = Message.system_message(
+                    "You are a planning assistant. Your task is to summarize the completed plan."
+                )
 
-                {plan_text}
+                user_message = Message.user_message(
+                    f"The plan has been completed. Here is the final plan status:\n\n{plan_text}\n\nPlease provide a summary of what was accomplished and any final thoughts."
+                )
 
-                Please provide a summary of what was accomplished and any final thoughts.
-                """
-                summary = await agent.run(summary_prompt)
-                return f"Plan completed:\n\n{summary}"
-            except Exception as e2:
-                logger.error(f"Error finalizing plan with agent: {e2}")
-                return "Plan completed. Error generating summary."
+                response = await self.llm.ask(
+                    messages=[user_message], system_msgs=[system_message]
+                )
+
+                final_result = f"Plan completed:\n\n{response}"
+            except Exception as e:
+                logger.error(f"Error finalizing plan with LLM: {e}")
+                final_result = f"Plan completed:\n{plan_text}"
+
+        # Record completion event
+        if hasattr(self, "event_manager") and self.event_manager:
+            await self.event_manager.complete(final_result)
+
+        return final_result

@@ -190,6 +190,7 @@ class ToolDetail:
     str_replace_editor: Optional[StrReplaceEditor] = None
     terminate: Optional[Terminate] = None
     r2_upload: Optional[R2Upload] = None
+    finish: Optional[str] = None
 
 
 class ToolStatus(str, Enum):
@@ -238,7 +239,7 @@ class ToolResult(BaseModel):
     base64_image: Optional[str] = None
     error: Optional[str] = None
     system: Optional[str] = None
-    target_url: Optional[str] = None
+    url: Optional[str] = None
 
 
 class BrowserUseTool(BaseModel):
@@ -325,6 +326,16 @@ class PythonExecute(BaseModel):
     result: Optional[PythonExecResul] = None
 
 
+class DeployWebsite(BaseModel):
+    """Website deployment operation details"""
+
+    folder_path: Optional[str] = None
+    site_name: Optional[str] = None
+    file_count: Optional[int] = None
+    entry_url: Optional[str] = None
+    result: Optional[ToolResult] = None
+
+
 class ToolDetail(BaseModel):
     """tool result detail"""
 
@@ -338,6 +349,8 @@ class ToolDetail(BaseModel):
     python_execute: Optional[PythonExecute] = None
     cos_upload: Optional[COSUpload] = None
     r2_upload: Optional[R2Upload] = None
+    deploy_website: Optional[DeployWebsite] = None
+    finish: Optional[str] = None
 
 
 class Event(BaseModel):
@@ -566,7 +579,7 @@ class EventManager:
                         base64_image=result.base64_image,
                         error=result.error,
                         system=result.system,
-                        target_url=result.target_url,
+                        url=result.url,
                     ),
                 )
                 event = Event(
@@ -679,6 +692,7 @@ class EventManager:
         # 7. r2_upload tool
         elif tool_name == "r2_upload":
             if isinstance(args, dict) and isinstance(result, base.ToolResult):
+                # Convert base.ToolResult to dictionary
                 result_dict = {
                     "output": (
                         result.output if hasattr(result, "output") else str(result)
@@ -707,7 +721,49 @@ class EventManager:
                 await self.add_event(event)
                 return event
 
-        # 8. planning tool
+        # 8. deploy_website tool
+        elif tool_name == "deploy_website":
+            if isinstance(args, dict) and isinstance(result, base.ToolResult):
+                # Extract file count from result output if available
+                file_count = None
+                if hasattr(result, "output"):
+                    import re
+
+                    count_match = re.search(r"Files uploaded \((\d+)\)", result.output)
+                    if count_match:
+                        file_count = int(count_match.group(1))
+
+                # Convert base.ToolResult to dictionary
+                result_dict = {
+                    "output": (
+                        result.output if hasattr(result, "output") else str(result)
+                    ),
+                    "base64_image": (
+                        result.base64_image if hasattr(result, "base64_image") else None
+                    ),
+                    "error": result.error if hasattr(result, "error") else None,
+                    "system": result.system if hasattr(result, "system") else None,
+                }
+
+                deploy_website = DeployWebsite(
+                    folder_path=args.get("folder_path"),
+                    site_name=args.get("site_name"),
+                    file_count=file_count,
+                    entry_url=result.url if hasattr(result, "url") else None,
+                    result=result_dict,
+                )
+
+                event = Event(
+                    type=TypeEnum.TOOL_USED,
+                    tool=tool_name,
+                    tool_status=ToolStatus.SUCCESS if success else ToolStatus.FAIL,
+                    content=str(result),
+                    tool_detail=ToolDetail(deploy_website=deploy_website),
+                )
+                await self.add_event(event)
+                return event
+
+        # 9. planning tool
         elif tool_name == "planning":
             if isinstance(args, dict) and isinstance(result, base.ToolResult):
                 planning = Planning(
@@ -730,7 +786,7 @@ class EventManager:
                 await self.add_event(event)
                 return event
 
-        # 9. python_execute tool
+        # 10. python_execute tool
         elif tool_name == "python_execute":
             if isinstance(args, dict):
                 python_execute = PythonExecute(
@@ -750,7 +806,26 @@ class EventManager:
                 await self.add_event(event)
                 return event
 
-        # 10. default: handle other tool types
+        # 11. finish tool
+        elif tool_name == "finish":
+            finish_result = args.get("result", "")
+            if not finish_result and hasattr(result, "output"):
+                finish_result = result.output
+
+            event = Event(
+                type=TypeEnum.TOOL_USED,
+                tool=tool_name,
+                tool_status=ToolStatus.SUCCESS,
+                content=finish_result,
+                tool_detail=ToolDetail(finish=finish_result),
+            )
+            await self.add_event(event)
+
+            # Also send completion event
+            await self.complete(finish_result)
+            return event
+
+        # 12. default: handle other tool types
         event = Event(
             type=TypeEnum.TOOL_USED,
             tool=tool_name,

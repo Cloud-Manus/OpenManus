@@ -39,7 +39,7 @@ class ToolResult(BaseModel):
     error: Optional[str] = Field(default=None)
     base64_image: Optional[str] = Field(default=None)
     system: Optional[str] = Field(default=None)
-    target_url: Optional[str] = Field(default=None)
+    url: Optional[str] = Field(default=None)
 
     class Config:
         arbitrary_types_allowed = True
