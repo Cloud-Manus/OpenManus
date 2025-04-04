@@ -326,6 +326,7 @@ class FileSaver(BaseModel):
 
     file_path: Optional[str] = None
     content: Optional[str] = None
+    result: Optional[ToolResult] = None
 
 class Terminal(BaseModel):
     """terminal detail"""
@@ -359,6 +360,8 @@ class ToolDetail(BaseModel):
     r2_upload: Optional[R2Upload] = None
     deploy_website: Optional[DeployWebsite] = None
     verify_website: Optional[VerifyWebsite] = None
+    file_saver: Optional[FileSaver] = None
+    terminal: Optional[Terminal] = None
     finish: Optional[str] = None
 
 
@@ -895,10 +898,18 @@ class EventManager:
             return event
         # 13. file_saver tool
         elif tool_name == "file_saver":
+            print(f"file_saver args: {args}, result: {result}")
+            print(f"file_saver result type: {type(result)}")
             if isinstance(args, dict) and isinstance(result, base.ToolResult):
                 file_saver = FileSaver(
                     file_path=args.get("file_path"),
                     content=args.get("content"),
+                    result=ToolResult(
+                        output=result.output,
+                        base64_image=result.base64_image,
+                        error=result.error,
+                        system=result.system,
+                    ),
                 )
                 event = Event(
                     type=TypeEnum.TOOL_USED,
@@ -910,9 +921,17 @@ class EventManager:
                 return event
         # 14. terminal tool
         elif tool_name == "terminal":
+            print(f"terminal args: {args}, result: {result}")
+            print(f"terminal result type: {type(result)}")
             if isinstance(args, dict) and isinstance(result, base.ToolResult):
                 terminal = Terminal(
                     command=args.get("command"),
+                    result=ToolResult(
+                        output=result.output,
+                        base64_image=result.base64_image,
+                        error=result.error,
+                        system=result.system,
+                    ),
                 )
                 event = Event(
                     type=TypeEnum.TOOL_USED,
