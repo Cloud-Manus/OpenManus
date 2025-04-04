@@ -12,6 +12,9 @@ from app.tool.finish import FinishTool
 from app.tool.python_execute import PythonExecute
 from app.tool.r2_upload_tool import R2UploadTool
 from app.tool.str_replace_editor import StrReplaceEditor
+from app.tool.file_saver import FileSaver
+from app.tool.file_operators import LocalFileOperator
+from app.tool.terminal import Terminal
 
 
 class Manus(BrowserAgent):
@@ -42,6 +45,8 @@ class Manus(BrowserAgent):
             Terminate(),
             DeployWebsiteTool(),
             VerifyWebsiteTool(),
+            FileSaver(),
+            Terminal(),
             # FinishTool(),
         )
     )

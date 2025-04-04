@@ -321,6 +321,18 @@ class DeployWebsite(BaseModel):
     entry_url: Optional[str] = None
     result: Optional[ToolResult] = None
 
+class FileSaver(BaseModel):
+    """file saver detail"""
+
+    file_path: Optional[str] = None
+    content: Optional[str] = None
+
+class Terminal(BaseModel):
+    """terminal detail"""
+
+    command: Optional[str] = None
+    result: Optional[ToolResult] = None
+
 
 class VerifyWebsite(BaseModel):
     url: str
@@ -881,6 +893,35 @@ class EventManager:
             )
             await self.add_event(event)
             return event
+        # 13. file_saver tool
+        elif tool_name == "file_saver":
+            if isinstance(args, dict) and isinstance(result, base.ToolResult):
+                file_saver = FileSaver(
+                    file_path=args.get("file_path"),
+                    content=args.get("content"),
+                )
+                event = Event(
+                    type=TypeEnum.TOOL_USED,
+                    tool=tool_name,
+                    tool_detail=ToolDetail(file_saver=file_saver),
+                    success=success,
+                )
+                await self.add_event(event)
+                return event
+        # 14. terminal tool
+        elif tool_name == "terminal":
+            if isinstance(args, dict) and isinstance(result, base.ToolResult):
+                terminal = Terminal(
+                    command=args.get("command"),
+                )
+                event = Event(
+                    type=TypeEnum.TOOL_USED,
+                    tool=tool_name,
+                    success=success,
+                    tool_detail=ToolDetail(terminal=terminal),
+                )
+                await self.add_event(event)
+                return event
 
         # 13. default: handle other tool types
         event = Event(

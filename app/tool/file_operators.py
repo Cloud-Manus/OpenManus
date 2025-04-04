@@ -8,7 +8,6 @@ from app.config import SandboxSettings
 from app.exceptions import ToolError
 from app.sandbox.client import SANDBOX_CLIENT
 
-
 PathLike = Union[str, Path]
 
 
@@ -42,6 +41,8 @@ class FileOperator(Protocol):
 class LocalFileOperator(FileOperator):
     """File operations implementation for local filesystem."""
 
+    name: str = "local_file_operator"
+    description: str = "File operations implementation for local filesystem."
     encoding: str = "utf-8"
 
     async def read_file(self, path: PathLike) -> str:

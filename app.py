@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 
 from app.event import EventManager
 from app.flow.flow_factory import FlowFactory, FlowType
-from app.prompt.manus import SYSTEM_PROMPT
 from app.agent.manus import Manus
 
 app = FastAPI()
@@ -67,8 +66,8 @@ class TaskManager:
         self.queues[task_id] = asyncio.Queue()
         self.task_events[task_id] = []
         workspace = self.get_task_workspace(task_id)
-        if not os.path.exists(workspace):
-            os.makedirs(workspace)
+        # if not os.path.exists(workspace):
+        #     os.makedirs(workspace)
         self.workspace[task_id] = workspace
         return task
 
