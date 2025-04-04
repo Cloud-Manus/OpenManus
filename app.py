@@ -170,7 +170,6 @@ async def run_task(task_id: str, prompt: str):
         # create agent
         agent = Manus(
             name="Manus",
-            system_prompt=SYSTEM_PROMPT.format(directory=workspace),
             description="A versatile agent that can solve various tasks using multiple tools",
             event_manager=event_manager,
             max_steps=20,
