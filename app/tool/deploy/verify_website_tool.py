@@ -17,6 +17,7 @@ class VerifyWebsiteTool(BaseTool):
         "Verify that a deployed website is functioning correctly and meets expectations. "
         "This tool performs checks on the deployed site, including accessibility, content validation, "
         "and resource loading. Use after deploying a website to confirm it's ready for users."
+        "when website is ready, return 'website is ready for users' and terminate the task."
     )
     parameters: dict = {
         "type": "object",

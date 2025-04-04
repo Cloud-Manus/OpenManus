@@ -12,10 +12,12 @@ from pathlib import Path
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.event import EventManager
 from app.flow.flow_factory import FlowFactory, FlowType
+from app.prompt.manus import SYSTEM_PROMPT
+from app.agent.manus import Manus
 
 app = FastAPI()
 
@@ -40,6 +42,7 @@ class Task(BaseModel):
     created_at: datetime
     status: str
     steps: list = []
+    workspace: dict = {}
 
     def model_dump(self, *args, **kwargs):
         data = super().model_dump(*args, **kwargs)
@@ -53,6 +56,7 @@ class TaskManager:
         self.queues = {}
         self.running_tasks = {}  # Store running task coroutines
         self.task_events = {}
+        self.workspace = {}
 
     def create_task(self, prompt: str) -> Task:
         task_id = str(uuid.uuid4())
@@ -62,6 +66,10 @@ class TaskManager:
         self.tasks[task_id] = task
         self.queues[task_id] = asyncio.Queue()
         self.task_events[task_id] = []
+        workspace = self.get_task_workspace(task_id)
+        if not os.path.exists(workspace):
+            os.makedirs(workspace)
+        self.workspace[task_id] = workspace
         return task
 
     def store_running_task(self, task_id: str, task_coroutine):
@@ -92,6 +100,9 @@ class TaskManager:
 
             return True
         return False
+
+    def get_task_workspace(self, task_id: str):
+        return Path(__file__).parent / "workspace" / task_id
 
     async def update_task_step(
         self, task_id: str, step: int, result: str, step_type: str = "step"
@@ -148,9 +159,6 @@ async def create_task(prompt: str = Body(..., embed=True)):
     return {"task_id": task.id}
 
 
-from app.agent.manus import Manus
-
-
 async def run_task(task_id: str, prompt: str):
     try:
         # update task status
@@ -158,12 +166,15 @@ async def run_task(task_id: str, prompt: str):
 
         event_manager = EventManager()
 
+        workspace = task_manager.workspace[task_id]
         # create agent
         agent = Manus(
             name="Manus",
+            system_prompt=SYSTEM_PROMPT.format(directory=workspace),
             description="A versatile agent that can solve various tasks using multiple tools",
             event_manager=event_manager,
             max_steps=20,
+            workspace=workspace,
         )
         if args.flow:
             agents = {
@@ -208,7 +219,9 @@ async def task_events(task_id: str):
             while True:
                 try:
                     current_time = time.time()
-                    timeout = max(0.1, heartbeat_interval - (current_time - last_heartbeat))
+                    timeout = max(
+                        0.1, heartbeat_interval - (current_time - last_heartbeat)
+                    )
 
                     try:
                         # wait event check timeout heatbreat

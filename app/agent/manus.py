@@ -27,7 +27,6 @@ class Manus(BrowserAgent):
     description: str = (
         "A versatile agent that can solve various tasks using multiple tools"
     )
-
     system_prompt: str = SYSTEM_PROMPT.format(directory=config.workspace_root)
     next_step_prompt: str = NEXT_STEP_PROMPT
 
@@ -43,7 +42,7 @@ class Manus(BrowserAgent):
             Terminate(),
             DeployWebsiteTool(),
             VerifyWebsiteTool(),
-            FinishTool(),
+            # FinishTool(),
         )
     )
 
